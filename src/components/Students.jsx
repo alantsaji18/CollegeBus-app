@@ -79,6 +79,7 @@ const Students = () => {
   const handleRegister = (e) => {
     e.preventDefault();
 
+    // 1. Check for empty fields
     for (let key in formData) {
       if (!formData[key].trim()) {
         setErrorMsg("All fields must be filled!");
@@ -86,6 +87,14 @@ const Students = () => {
       }
     }
 
+    // 2. Validate Contact Number (must be exactly 10 digits)
+    const phoneRegex = /^\d{10}$/;
+    if (!phoneRegex.test(formData.contactNumber.trim())) {
+      setErrorMsg("Contact number must be exactly 10 digits!");
+      return;
+    }
+
+    // 3. Check for duplicate Student ID or Roll Number
     const isDuplicate = students.some(
       (s) => s.id.toLowerCase() === formData.id.toLowerCase() || 
              s.rollNo.toLowerCase() === formData.rollNo.toLowerCase()
@@ -223,7 +232,7 @@ const Students = () => {
                 <input
                   type="text"
                   name="stop"
-                  placeholder="e.g. Potta Junction"
+                  placeholder="e.g. Poolani Junction"
                   value={formData.stop}
                   onChange={handleChange}
                 />
@@ -245,7 +254,8 @@ const Students = () => {
                 <input
                   type="text"
                   name="contactNumber"
-                  placeholder="e.g. 9876543210"
+                  placeholder="e.g. 9876543210 "
+                  maxLength="10"
                   value={formData.contactNumber}
                   onChange={handleChange}
                 />
