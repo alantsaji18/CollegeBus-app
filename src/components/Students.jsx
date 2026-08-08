@@ -6,16 +6,49 @@ const Students = () => {
   const navigate = useNavigate();
   const [students, setStudents] = useState([
     {
-      id: "ST-001",
+      id: "FST-001",
       name: "Rahul Kumar",
-      rollNo: "CS101",
+      rollNo: "MCA101",
       route: "ALuva",
       stop: "Town Hall",
       busNumber: "Bus-101",
-      department: "Computer Science",
-      className: "S6 MCA",
+      department: "MCA",
+      className: "S3 MCA",
       contactNumber: "9876543210",
     },
+    {
+      id: "FST-002",
+      name: "Ayan Das",
+      rollNo: "EEE105",
+      route: "Thrissur",
+      stop: "Chalakudy PUB",
+      busNumber: "Bus-102",
+      department: "B-Tech ",
+      className: "S6 EEE",
+      contactNumber: "9865231905",
+    },
+    {
+      id: "FST-003",
+      name: "Rohan Mehta",
+      rollNo: "MECH101",
+      route: "Ernakulam",
+      stop: "Marine Drive",
+      busNumber: "Bus-108",
+      department: "B-Tech ",
+      className: "S6 MECH",
+      contactNumber: "9876587105",
+    },
+    {
+      id: "FST-004",
+      name: "Rekha Sharma",
+      rollNo: "IMCA110",
+      route: "Muvattupuzha",
+      stop: "Town Junction",
+      busNumber: "Bus-106",
+      department: "IMCA",
+      className: "S1 IMCA",
+      contactNumber: "8815643210",
+    }
   ]);
 
   const [formData, setFormData] = useState({
