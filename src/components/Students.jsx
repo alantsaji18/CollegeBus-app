@@ -15,6 +15,7 @@ const Students = () => {
       department: "MCA",
       className: "S3 MCA",
       contactNumber: "9876543210",
+      password: "MCA101",
     },
     {
       id: "FST-002",
@@ -26,6 +27,7 @@ const Students = () => {
       department: "B-Tech ",
       className: "S6 EEE",
       contactNumber: "9865231905",
+      password: "EEE105",
     },
     {
       id: "FST-003",
@@ -37,6 +39,7 @@ const Students = () => {
       department: "B-Tech ",
       className: "S6 MECH",
       contactNumber: "9876587105",
+      password: "MECH101",
     },
     {
       id: "FST-004",
@@ -48,6 +51,7 @@ const Students = () => {
       department: "IMCA",
       className: "S1 IMCA",
       contactNumber: "8815643210",
+      password: "IMCA110",
     }
   ]);
 
@@ -61,6 +65,7 @@ const Students = () => {
     department: "",
     className: "",
     contactNumber: "",
+    password: "",
   });
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -102,6 +107,7 @@ const Students = () => {
       department: "",
       className: "",
       contactNumber: "",
+      password: "",
     });
     setErrorMsg("");
   };
@@ -121,7 +127,8 @@ const Students = () => {
       student.busNumber.toLowerCase().includes(query) ||
       student.department.toLowerCase().includes(query) ||
       student.className.toLowerCase().includes(query) ||
-      student.contactNumber.toLowerCase().includes(query)
+      student.contactNumber.toLowerCase().includes(query) ||
+      student.password.toLowerCase().includes(query)
     );
   });
 
@@ -243,6 +250,17 @@ const Students = () => {
                   onChange={handleChange}
                 />
               </div>
+
+              <div className="form-group">
+                <label>Password</label>
+                <input
+                  type="password"
+                  name="password"
+                  placeholder="Enter password"
+                  value={formData.password}
+                  onChange={handleChange}
+                />
+              </div>
             </div>
 
             <div style={{ display: "flex", justifyContent: "center", marginTop: "24px" }}>
@@ -274,6 +292,7 @@ const Students = () => {
                   <th>Route / Stop</th>
                   <th>Bus</th>
                   <th>Contact</th>
+                  <th>Password</th>
                   <th>Action</th>
                 </tr>
               </thead>
@@ -288,6 +307,7 @@ const Students = () => {
                       <td>{student.route} <br/><small>{student.stop}</small></td>
                       <td>{student.busNumber}</td>
                       <td>{student.contactNumber}</td>
+                      <td>{student.password}</td>
                       <td>
                         <button
                           className="delete-btn"
@@ -300,7 +320,7 @@ const Students = () => {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="8" className="no-data">No matching students found.</td>
+                    <td colSpan="9" className="no-data">No matching students found.</td>
                   </tr>
                 )}
               </tbody>
