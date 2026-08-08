@@ -3,6 +3,7 @@ import './App.css';
 import AdminDashboard from './components/AdminDashboard';
 import Students from './components/Students';
 import Buses from './components/Buses';
+import Staff from './components/Staff';
 import "leaflet/dist/leaflet.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
@@ -15,6 +16,7 @@ function App() {
         <Route path="/" element={<AdminDashboard />} />
         <Route path="/students" element={<Students />} />
         <Route path="/viewbus" element={<Buses />} />
+        <Route path="/viewdriver" element={<Staff />} />
         
       </Routes>
     </BrowserRouter>

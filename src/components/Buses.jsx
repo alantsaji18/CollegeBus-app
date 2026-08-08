@@ -75,7 +75,7 @@ const Buses = () => {
     route: "",
     driversContactNumber: "",
     capacity: "",
-    status: "",
+    status: "Active",
   });
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -89,6 +89,7 @@ const Buses = () => {
   const handleRegister = (e) => {
     e.preventDefault();
 
+    // 1. Check for empty fields
     for (let key in formData) {
       if (!formData[key].trim()) {
         setErrorMsg("All fields must be filled!");
@@ -96,6 +97,14 @@ const Buses = () => {
       }
     }
 
+    // 2. Validate Driver's Contact Number (must be exactly 10 digits)
+    const phoneRegex = /^\d{10}$/;
+    if (!phoneRegex.test(formData.driversContactNumber.trim())) {
+      setErrorMsg("Driver's contact number must be exactly 10 digits!");
+      return;
+    }
+
+    // 3. Check for duplicate Bus ID
     const isDuplicate = buses.some(
       (b) => b.busId.toLowerCase() === formData.busId.toLowerCase()
     );
@@ -114,7 +123,7 @@ const Buses = () => {
       route: "",
       driversContactNumber: "",
       capacity: "",
-      status: "",
+      status: "Active",
     });
     setErrorMsg("");
   };
@@ -218,6 +227,7 @@ const Buses = () => {
                   type="text"
                   name="driversContactNumber"
                   placeholder="e.g. 9876543210"
+                  maxLength="10"
                   value={formData.driversContactNumber}
                   onChange={handleChange}
                 />
