@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import "./AdminDashboard.css";
 import bus1 from "../assets/bus1.png";
 import bus2 from "../assets/bus2.png";
@@ -38,7 +39,7 @@ const AdminDashboard = () => {
       <nav className="navbar">
         <div className="nav-brand">BusManagement</div>
         <ul className="nav-links">
-          <li><a href="#students">Students</a></li>
+          <li><Link to="/students">Students</Link></li>
           <li><a href="#buses">Buses</a></li>
           <li><a href="#staff">Staff</a></li>
           <li><a href="#live-tracking">Live Tracking</a></li>
