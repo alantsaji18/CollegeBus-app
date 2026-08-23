@@ -147,7 +147,7 @@ export default function Home() {
           <div style={styles.heroButtons}>
 
             <a
-              href="/student-login"
+              href="/studentlogin"
               style={styles.heroPrimaryButton}
             >
               <i
@@ -158,7 +158,7 @@ export default function Home() {
             </a>
 
              <a
-              href="/staff-login"
+              href="/stafflogin"
               style={styles.heroPrimaryButton}
             >
               <i
@@ -1782,7 +1782,7 @@ export default function Home() {
             </p>
 
             <a
-              href="/staff-login"
+              href="/stafflogin"
               style={{
                 ...styles.portalButton,
                 backgroundColor: "#db2777",
@@ -1821,7 +1821,7 @@ export default function Home() {
             </p>
 
             <a
-              href="/student-login"
+              href="/studentlogin"
               style={{
                 ...styles.portalButton,
                 backgroundColor: "#ca8a04",
