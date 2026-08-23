@@ -236,7 +236,7 @@ const LiveTracking = () => {
     <div className="students-page">
       <div className="students-header">
         <h2>Live Bus Tracking Portal</h2>
-        <button className="back-btn" onClick={() => navigate("/")}>
+        <button className="back-btn" onClick={() => navigate("/admin")}>
           ← Back to Dashboard
         </button>
       </div>
