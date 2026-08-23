@@ -145,7 +145,7 @@ const Students = () => {
     <div className="students-page">
       <div className="students-header">
         <h2>Student Management Portal</h2>
-        <button className="back-btn" onClick={() => navigate("/admin")}>
+        <button className="back-btn" onClick={() => navigate("/admindashboard")}>
           ← Back to Dashboard
         </button>
       </div>
