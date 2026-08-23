@@ -169,7 +169,7 @@ export default function Home() {
             </a>
 
              <a
-              href="/admin-login"
+              href="/adminlogin"
               style={styles.heroPrimaryButton}
             >
               <i
@@ -1743,7 +1743,7 @@ export default function Home() {
             </p>
 
             <a
-              href="/admin-login"
+              href="/adminlogin"
               style={{
                 ...styles.portalButton,
                 backgroundColor: "#2563eb",
