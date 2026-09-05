@@ -140,22 +140,20 @@ export default function StudentDashboard() {
       stopMarkersRef.current.forEach(m => map.removeLayer(m));
       stopMarkersRef.current = [];
 
-      // Initial lines: Completed is empty, Remaining is the full route ahead
       completedPolylineRef.current = window.L.polyline([], {
-        color: '#cbd5e1', // subtle gray trail behind
+        color: '#cbd5e1',
         weight: 5,
         opacity: 0.5
       }).addTo(map);
 
       remainingPolylineRef.current = window.L.polyline(osrmRouteCoords, {
-        color: '#1a73e8', // Google Maps Blue ahead
+        color: '#1a73e8',
         weight: 6,
         opacity: 0.85,
         lineCap: 'round',
         lineJoin: 'round'
       }).addTo(map);
 
-      // Render all 11 stops along the route with custom numbered pins (FISAT College as #1)
       routeStops.forEach((stop, idx) => {
         const stopIcon = window.L.divIcon({
           className: 'google-stop-pin',
@@ -171,7 +169,6 @@ export default function StudentDashboard() {
         stopMarkersRef.current.push(marker);
       });
 
-      // Moving Bus Emoji Marker 🚌
       const busEmojiIcon = window.L.divIcon({
         className: 'custom-bus-emoji-marker',
         html: `<div style="background-color: #1a73e8; color: white; padding: 6px 12px; border-radius: 20px; font-weight: bold; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,0.4); display: flex; align-items: center; gap: 6px; border: 2px solid white; white-space: nowrap;">🚌 ${student.busNumber}</div>`,
@@ -184,7 +181,6 @@ export default function StudentDashboard() {
     }
   }, [osrmRouteCoords]);
 
-  // Real-time Bus Animation, Dynamic Route Splitting (Disappearing Trail Behind), and Next Stop Updater
   useEffect(() => {
     let interval;
     if (activeTab === "tracking" && osrmRouteCoords.length > 0 && busMarkerRef.current) {
@@ -197,7 +193,6 @@ export default function StudentDashboard() {
             busMarkerRef.current.setLatLng(currentPos);
           }
 
-          // Split the polyline coordinates: behind the bus vs ahead of the bus
           const traveledCoords = osrmRouteCoords.slice(0, nextIndex + 1);
           const upcomingCoords = osrmRouteCoords.slice(nextIndex);
 
@@ -208,7 +203,6 @@ export default function StudentDashboard() {
             remainingPolylineRef.current.setLatLngs(upcomingCoords);
           }
 
-          // Automatically calculate proximity to update the active upcoming stop index
           const calculatedStopIndex = Math.floor((nextIndex / osrmRouteCoords.length) * routeStops.length);
           setCurrentActiveStopIndex(Math.min(calculatedStopIndex, routeStops.length - 1));
 
@@ -222,7 +216,7 @@ export default function StudentDashboard() {
   const handleLogout = () => navigate("/studentlogin");
 
   const [busMatrix, setBusMatrix] = useState([
-    [{ id: "1,1", status: "disabled" }, { id: "1,2", status: "available" }, { id: "1,3", status: "available" }, { id: "1,4", status: "available" }, { id: "1,5", status: "available" }, { id: "1,6", status: "sold" }],
+    [{ id: "1,1", status: "available" }, { id: "1,2", status: "available" }, { id: "1,3", status: "available" }, { id: "1,4", status: "available" }, { id: "1,5", status: "available" }, { id: "1,6", status: "sold" }],
     [{ id: "2,1", status: "available" }, { id: "2,2", status: "available" }, { id: "2,3", status: "available" }, { id: "2,4", status: "available" }, { id: "2,5", status: "available" }, { id: "2,6", status: "available" }],
     [{ id: "3,1", status: "available" }, { id: "3,2", status: "available" }, { id: "3,3", status: "available" }, { id: "3,4", status: "sold" }, { id: "3,5", status: "sold" }, { id: "3,6", status: "sold" }],
     [{ id: "4,1", status: "available" }, { id: "4,2", status: "available" }, { id: "4,3", status: "available" }, { id: "4,4", status: "available" }, { id: "4,5", status: "available" }, { id: "4,6", status: "available" }],
@@ -301,7 +295,7 @@ export default function StudentDashboard() {
           </div>
         </div>
         <button onClick={handleLogout} style={styles.logoutBtn}>
-          <i className="fas fa-sign-out-alt" style={{ marginRight: "6px" }}></i> Go to Login
+          <i className="fas fa-sign-out-alt" style={{ marginRight: "6px" }}></i> Log out
         </button>
       </header>
 
@@ -363,6 +357,22 @@ export default function StudentDashboard() {
       </div>
 
       <main style={styles.mainContent}>
+        {/* Added Student Name & Profile Display Banner */}
+        <div style={styles.studentProfileBar}>
+          <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
+            <div style={styles.studentAvatarCircle}>
+              <i className="fas fa-user-graduate"></i>
+            </div>
+            <div>
+              <h2 style={{ margin: 0, fontSize: "1.25rem", color: "#0c2340", fontWeight: "700" }}>{student.name}</h2>
+              <p style={{ margin: "2px 0 0 0", fontSize: "0.85rem", color: "#64748b" }}>Roll No: <strong>{student.rollNo}</strong> | Class: <strong>{student.className}</strong> ({student.department})</p>
+            </div>
+          </div>
+          <div style={styles.studentBadgeStatus}>
+            <span style={styles.statusDot}></span> Verified Student
+          </div>
+        </div>
+
         {bookingMessage && (
           <div style={styles.alertBanner}>
             <span>{bookingMessage}</span>
@@ -374,6 +384,7 @@ export default function StudentDashboard() {
           <div style={styles.cardGrid}>
             <div style={styles.card}>
               <h3 style={styles.cardTitle}><i className="fas fa-route" style={{ color: "#0c2340", marginRight: "8px" }}></i> Assigned Route Information</h3>
+              <div style={styles.infoRow}><strong>Student Name:</strong> <span style={{ fontWeight: "bold", color: "#1a73e8" }}>{student.name}</span></div>
               <div style={styles.infoRow}><strong>Assigned Bus:</strong> <span>{student.busNumber}</span></div>
               <div style={styles.infoRow}><strong>Route Name:</strong> <span>{student.route}</span></div>
               <div style={styles.infoRow}><strong>Origin College:</strong> <span style={{ color: "#10b981", fontWeight: "bold" }}>Federal Institute of Science and Technology (FISAT), Hormis Nagar, Mookannoor, Angamaly</span></div>
@@ -393,12 +404,11 @@ export default function StudentDashboard() {
           </div>
         )}
 
-        {/* TAB 2: LIVE MAP WITH BUS EMOJI & DISAPPEARING TRAIL BEHIND */}
         {activeTab === "tracking" && (
           <div style={styles.card}>
             <div style={styles.googleMapHeaderBar}>
               <div>
-                <h3 style={{ ...styles.cardTitle, margin: 0 }}><i className="fas fa-map-marked-alt" style={{ color: "#1a73e8", marginRight: "8px" }}></i> Live Transit from FISAT College</h3>
+                <h3 style={{ ...styles.cardTitle, margin: 0 }}><i className="fas fa-map-marked-alt" style={{ color: "#1a73e8", marginRight: "8px" }}></i> Live Transit for {student.name} ({student.busNumber})</h3>
                 <p style={{ ...styles.subText, margin: "4px 0 0 0" }}>Starting at <strong>Federal Institute of Science and Technology, Hormis Nagar, Mookannoor, Angamaly</strong> with 11 mapped stops.</p>
               </div>
               <div style={styles.googleRouteBadge}>
@@ -407,7 +417,6 @@ export default function StudentDashboard() {
               </div>
             </div>
 
-            {/* Live Updating Next Stop Banner */}
             <div style={styles.nextStopLiveBanner}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                 <span style={styles.pulseIndicator}></span>
@@ -460,6 +469,30 @@ export default function StudentDashboard() {
             {predictionDone && (
               <div style={styles.busLayoutBox}>
                 <div style={styles.busFrontIndicator}>Front of bus (FISAT College Dispatch)</div>
+
+                <div style={styles.legendContainer}>
+                  <div style={styles.legendItem}>
+                    <div style={{ ...styles.legendBox, backgroundColor: "#4ade80", border: "2px solid #166534" }}></div>
+                    <span>Recommended (Shade)</span>
+                  </div>
+                  <div style={styles.legendItem}>
+                    <div style={{ ...styles.legendBox, backgroundColor: "#fde047", border: "2px solid #a16207" }}></div>
+                    <span>Moderate Sun</span>
+                  </div>
+                  <div style={styles.legendItem}>
+                    <div style={{ ...styles.legendBox, backgroundColor: "#fca5a5", border: "2px solid #b91c1c" }}></div>
+                    <span>Not Recommended (Glare)</span>
+                  </div>
+                  <div style={styles.legendItem}>
+                    <div style={{ ...styles.legendBox, backgroundColor: "#a5f3fc", border: "2px solid #06b6d4" }}></div>
+                    <span>Already Booked</span>
+                  </div>
+                  <div style={styles.legendItem}>
+                    <div style={{ ...styles.legendBox, backgroundColor: "#1e3a8a", border: "2px solid #0f172a" }}></div>
+                    <span>Selected Seat</span>
+                  </div>
+                </div>
+
                 <div style={styles.busSeatMatrix}>
                   {busMatrix.map((row, rIndex) => (
                     <div key={rIndex} style={styles.busRow}>
@@ -499,7 +532,7 @@ export default function StudentDashboard() {
                   ))}
                 </div>
                 <div style={{ textAlign: "center", marginTop: "20px" }}>
-                  <button onClick={handleBookSeat} style={styles.showSelectedBtn}>Confirm Reservation</button>
+                  <button onClick={handleBookSeat} style={styles.showSelectedBtn}>Confirm Reservation for {student.name}</button>
                   <div style={{ marginTop: "10px", fontFamily: "monospace", fontSize: "1rem" }}>{selectedSeat ? `[${selectedSeat.replace(",", "][")}]` : "[None Selected]"}</div>
                 </div>
               </div>
@@ -509,7 +542,7 @@ export default function StudentDashboard() {
 
         {activeTab === "bookings" && (
           <div style={styles.card}>
-            <h3 style={styles.cardTitle}><i className="fas fa-ticket-alt" style={{ color: "#0c2340", marginRight: "8px" }}></i> Manage Bookings ({myBookings.length} / 4 Active)</h3>
+            <h3 style={styles.cardTitle}><i className="fas fa-ticket-alt" style={{ color: "#0c2340", marginRight: "8px" }}></i> Manage Bookings for {student.name} ({myBookings.length} / 4 Active)</h3>
             {myBookings.length === 0 ? (
               <p style={styles.subText}>You have no active seat bookings yet.</p>
             ) : (
@@ -518,6 +551,7 @@ export default function StudentDashboard() {
                   <thead>
                     <tr>
                       <th style={styles.th}>Booking ID</th>
+                      <th style={styles.th}>Student</th>
                       <th style={styles.th}>Bus No</th>
                       <th style={styles.th}>Route</th>
                       <th style={styles.th}>Seat</th>
@@ -529,6 +563,7 @@ export default function StudentDashboard() {
                     {myBookings.map((b) => (
                       <tr key={b.bookingId}>
                         <td style={styles.td}>{b.bookingId}</td>
+                        <td style={styles.td}><strong>{student.name}</strong></td>
                         <td style={styles.td}>{b.busNumber}</td>
                         <td style={styles.td}>{b.route}</td>
                         <td style={styles.td}><strong>[{b.seatNo.replace(",", "][")}]</strong></td>
@@ -548,14 +583,31 @@ export default function StudentDashboard() {
 }
 
 const styles = {
-  page: { minHeight: "100vh", backgroundImage: `linear-gradient(rgba(244, 247, 246, 0.75), rgba(244, 247, 246, 0.75)), url('https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=1600&q=80')`, backgroundSize: "cover", backgroundPosition: "center", backgroundAttachment: "fixed", fontFamily: "'Inter', 'Segoe UI', sans-serif" },
+  page: { 
+    minHeight: "100vh", 
+    backgroundImage: `linear-gradient(rgba(244, 247, 246, 0.88), rgba(244, 247, 246, 0.88)), url('https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1600&q=80')`, 
+    backgroundSize: "cover", 
+    backgroundPosition: "center", 
+    backgroundAttachment: "fixed", 
+    fontFamily: "'Inter', 'Segoe UI', sans-serif" 
+  },
   header: { backgroundColor: "#0c2340", color: "#ffffff", padding: "15px 40px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" },
   headerTitleContainer: { display: "flex", alignItems: "center", gap: "15px" },
   logoIcon: { width: "45px", height: "45px", borderRadius: "50%", backgroundColor: "#ffc107", color: "#0c2340", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "1.4rem" },
   headerTitle: { margin: 0, fontSize: "1.3rem", fontWeight: 800 },
   headerSubtitle: { margin: "2px 0 0 0", fontSize: "0.8rem", color: "#cbd5e1" },
   logoutBtn: { backgroundColor: "transparent", border: "1px solid rgba(255,255,255,0.3)", color: "#ffffff", padding: "8px 16px", borderRadius: "6px", cursor: "pointer", fontWeight: 600 },
-  heroBanner: { position: "relative", width: "100%", height: "320px", backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.6)), url('https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=1600&q=80')`, backgroundSize: "cover", backgroundPosition: "center", display: "flex", alignItems: "flex-end", padding: "30px 40px" },
+  heroBanner: { 
+    position: "relative", 
+    width: "100%", 
+    height: "320px", 
+    backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.40), rgba(0, 0, 0, 0.65)), url('https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1600&q=80')`, 
+    backgroundSize: "cover", 
+    backgroundPosition: "center", 
+    display: "flex", 
+    alignItems: "flex-end", 
+    padding: "30px 40px" 
+  },
   heroOverlayContent: { maxWidth: "1200px", width: "100%", margin: "0 auto" },
   heroBadgeBox: { backgroundColor: "rgba(12, 35, 64, 0.85)", backdropFilter: "blur(6px)", padding: "20px 25px", borderRadius: "12px", borderLeft: "5px solid #ffc107", maxWidth: "600px", boxShadow: "0 8px 32px rgba(0,0,0,0.3)" },
   heroTitle: { color: "#ffffff", margin: "0 0 5px 0", fontSize: "1.4rem", fontWeight: 700 },
@@ -569,36 +621,43 @@ const styles = {
   tabContainer: { display: "flex", maxWidth: "1200px", margin: "0 auto", padding: "0 40px", justifyContent: "center", gap: "20px" },
   tabButton: { padding: "15px 20px", border: "none", background: "transparent", fontSize: "0.95rem", fontWeight: 600, color: "#64748b", cursor: "pointer", borderBottom: "3px solid transparent", flex: 1, maxWidth: "260px" },
   activeTab: { color: "#0c2340", borderBottomColor: "#1a73e8" },
-  mainContent: { padding: "30px 40px", maxWidth: "1200px", margin: "0 auto" },
-  alertBanner: { backgroundColor: "#eff6ff", border: "1px solid #bfdbfe", color: "#1e40af", padding: "12px 20px", borderRadius: "8px", marginBottom: "20px", display: "flex", justifyContent: "space-between", alignItems: "center" },
+  mainContent: { maxWidth: "1200px", margin: "30px auto", padding: "0 40px" },
+  studentProfileBar: { backgroundColor: "rgba(255, 255, 255, 0.95)", backdropFilter: "blur(4px)", padding: "18px 25px", borderRadius: "12px", boxShadow: "0 8px 20px rgba(0,0,0,0.06)", marginBottom: "25px", display: "flex", justifyContent: "space-between", alignItems: "center", borderLeft: "5px solid #1a73e8" },
+  studentAvatarCircle: { width: "45px", height: "45px", borderRadius: "50%", backgroundColor: "#eff6ff", color: "#1a73e8", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "1.2rem", border: "1px solid #bfdbfe" },
+  studentBadgeStatus: { backgroundColor: "#f0fdf4", color: "#166534", padding: "6px 12px", borderRadius: "20px", fontSize: "0.8rem", fontWeight: "700", border: "1px solid #bbf7d0", display: "flex", alignItems: "center", gap: "6px" },
+  statusDot: { width: "8px", height: "8px", backgroundColor: "#22c55e", borderRadius: "50%", display: "inline-block" },
+  card: { backgroundColor: "rgba(255, 255, 255, 0.95)", backdropFilter: "blur(4px)", padding: "30px", borderRadius: "12px", boxShadow: "0 10px 25px rgba(0,0,0,0.08)", marginBottom: "30px" },
+  cardTitle: { margin: "0 0 20px 0", fontSize: "1.2rem", fontWeight: 700, color: "#0c2340", display: "flex", alignItems: "center" },
+  cardGrid: { display: "grid", gridTemplateColumns: "2fr 1fr", gap: "25px" },
+  infoRow: { marginBottom: "12px", fontSize: "0.95rem", color: "#334155", display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: "8px" },
+  scheduleList: { paddingLeft: "20px", color: "#334155", lineHeight: "1.8", margin: 0 },
+  alertBanner: { backgroundColor: "#eff6ff", border: "1px solid #bfdbfe", color: "#1e40af", padding: "12px 20px", borderRadius: "8px", marginBottom: "20px", display: "flex", justifyContent: "space-between", alignItems: "center", fontWeight: "600" },
   closeAlert: { background: "none", border: "none", fontSize: "1.2rem", cursor: "pointer", color: "#1e40af" },
-  cardGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "25px" },
-  card: { backgroundColor: "rgba(255, 255, 255, 0.95)", backdropFilter: "blur(4px)", borderRadius: "12px", padding: "25px", boxShadow: "0 4px 15px rgba(0,0,0,0.05)", marginBottom: "20px" },
-  cardTitle: { margin: "0 0 15px 0", fontSize: "1.2rem", color: "#0c2340", fontWeight: 700 },
-  infoRow: { display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #f1f5f9", fontSize: "0.95rem", color: "#334155" },
-  scheduleList: { margin: 0, paddingLeft: "20px", color: "#334155", lineHeight: "2rem" },
-  subText: { color: "#64748b", fontSize: "0.9rem", marginBottom: "15px" },
-  googleMapHeaderBar: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px", backgroundColor: "#f8f9fa", padding: "12px 18px", borderRadius: "8px", border: "1px solid #dadce0" },
-  googleRouteBadge: { display: "flex", gap: "20px", fontSize: "0.85rem", color: "#3c4043" },
-  nextStopLiveBanner: { display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "#eff6ff", border: "1px solid #bfdbfe", padding: "12px 18px", borderRadius: "8px", marginBottom: "15px" },
-  pulseIndicator: { width: "12px", height: "12px", backgroundColor: "#10b981", borderRadius: "50%", display: "inline-block", boxShadow: "0 0 0 rgba(16, 185, 129, 0.4)", animation: "pulse 1.5s infinite" },
-  googleMapWrapper: { position: "relative", width: "100%", borderRadius: "10px", overflow: "hidden", border: "1px solid #dadce0", boxShadow: "inset 0 2px 4px rgba(0,0,0,0.06)" },
-  mlFormBoxSingle: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "15px", backgroundColor: "#f8fafc", padding: "20px", borderRadius: "10px", border: "1px solid #e2e8f0", marginBottom: "25px", alignItems: "flex-end" },
-  configField: { display: "flex", flexDirection: "column" },
-  configLabel: { fontSize: "0.8rem", fontWeight: 600, color: "#475569", marginBottom: "5px" },
-  configInput: { padding: "10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "0.9rem", backgroundColor: "#ffffff" },
-  mlPredictBtn: { backgroundColor: "#1a73e8", color: "#ffffff", border: "none", padding: "11px 20px", borderRadius: "8px", fontWeight: 700, cursor: "pointer", fontSize: "0.9rem", width: "100%" },
-  busLayoutBox: { maxWidth: "480px", margin: "0 auto", backgroundColor: "#ffffff", border: "1px solid #cbd5e1", borderRadius: "12px", padding: "25px", boxShadow: "0 10px 25px rgba(0,0,0,0.06)" },
-  busFrontIndicator: { textAlign: "center", fontSize: "0.85rem", color: "#475569", marginBottom: "20px", fontWeight: 600 },
-  busSeatMatrix: { display: "flex", flexDirection: "column", gap: "12px" },
-  busRow: { display: "flex", justifyContent: "center", alignItems: "center", gap: "10px" },
+  googleMapHeaderBar: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px", flexWrap: "wrap", gap: "10px" },
+  googleRouteBadge: { display: "flex", gap: "15px", backgroundColor: "#f8fafc", padding: "8px 15px", borderRadius: "8px", border: "1px solid #e2e8f0", fontSize: "0.9rem" },
+  nextStopLiveBanner: { backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0", padding: "12px 20px", borderRadius: "8px", marginBottom: "15px", display: "flex", justifyContent: "space-between", alignItems: "center" },
+  pulseIndicator: { width: "12px", height: "12px", backgroundColor: "#22c55e", borderRadius: "50%", display: "inline-block", boxShadow: "0 0 0 rgba(34, 197, 94, 0.4)", animation: "pulse 1.5s infinite" },
+  googleMapWrapper: { position: "relative", borderRadius: "10px", overflow: "hidden", border: "1px solid #cbd5e1" },
+  mlFormBoxSingle: { display: "grid", gridTemplateColumns: "repeat(3, 1fr) auto", gap: "15px", alignItems: "flex-end", backgroundColor: "#f8fafc", padding: "20px", borderRadius: "8px", border: "1px solid #e2e8f0", marginBottom: "20px" },
+  configField: { display: "flex", flexDirection: "column", gap: "6px" },
+  configLabel: { fontSize: "0.85rem", fontWeight: "600", color: "#475569" },
+  configInput: { padding: "10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "0.9rem" },
+  mlPredictBtn: { backgroundColor: "#1a73e8", color: "#ffffff", border: "none", padding: "10px 20px", borderRadius: "6px", fontWeight: "600", cursor: "pointer", height: "41px" },
+  busLayoutBox: { backgroundColor: "#f8fafc", padding: "25px", borderRadius: "12px", border: "1px solid #e2e8f0", marginTop: "20px" },
+  busFrontIndicator: { textAlign: "center", backgroundColor: "#0c2340", color: "#ffffff", padding: "8px", borderRadius: "6px", fontSize: "0.85rem", fontWeight: "700", marginBottom: "20px" },
+  legendContainer: { display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "15px", margin: "15px 0 25px 0", padding: "10px", backgroundColor: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0" },
+  legendItem: { display: "flex", alignItems: "center", gap: "6px", fontSize: "0.85rem", color: "#334155", fontWeight: "600" },
+  legendBox: { width: "16px", height: "16px", borderRadius: "4px" },
+  busSeatMatrix: { display: "flex", flexDirection: "column", gap: "10px", alignItems: "center" },
+  busRow: { display: "flex", alignItems: "center", gap: "25px" },
   seatGroup: { display: "flex", gap: "8px" },
-  aisleSpace: { width: "35px" },
-  seatSquare: { width: "32px", height: "32px", borderRadius: "6px" },
-  showSelectedBtn: { backgroundColor: "#ef4444", color: "#ffffff", border: "none", padding: "12px 20px", borderRadius: "8px", fontWeight: 600, cursor: "pointer", fontSize: "0.9rem", width: "100%" },
+  aisleSpace: { width: "30px" },
+  seatSquare: { width: "36px", height: "36px", borderRadius: "6px", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "0.75rem", fontWeight: "bold", transition: "all 0.2s" },
+  showSelectedBtn: { backgroundColor: "#10b981", color: "#ffffff", border: "none", padding: "12px 25px", borderRadius: "6px", fontWeight: "700", cursor: "pointer", fontSize: "0.95rem" },
   tableResponsive: { overflowX: "auto" },
   table: { width: "100%", borderCollapse: "collapse", textAlign: "left" },
-  th: { backgroundColor: "#f8fafc", padding: "12px", fontSize: "0.85rem", color: "#475569", borderBottom: "1px solid #e2e8f0" },
+  th: { padding: "12px", backgroundColor: "#f1f5f9", color: "#475569", fontSize: "0.85rem", borderBottom: "2px solid #cbd5e1" },
   td: { padding: "12px", borderBottom: "1px solid #f1f5f9", fontSize: "0.9rem", color: "#334155" },
-  cancelBtn: { backgroundColor: "#ef4444", color: "#ffffff", border: "none", padding: "6px 12px", borderRadius: "4px", cursor: "pointer", fontSize: "0.8rem", fontWeight: 600 }
+  cancelBtn: { backgroundColor: "#ef4444", color: "#ffffff", border: "none", padding: "6px 12px", borderRadius: "4px", cursor: "pointer", fontWeight: "600", fontSize: "0.80rem" },
+  subText: { color: "#64748b", fontSize: "0.95rem", margin: 0 }
 };
