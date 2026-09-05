@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+// Assuming this CSS file contains general resets or FontAwesome imports
+import "./Students.css";
 
 export default function TravelHistory() {
   const navigate = useNavigate();
@@ -130,11 +132,26 @@ export default function TravelHistory() {
   );
 }
 
+// --- Styles Object ---
+
 const styles = {
   page: {
     minHeight: "100vh",
-    backgroundColor: "#f4f7f6",
-    fontFamily: "'Inter', 'Segoe UI', sans-serif"
+    fontFamily: "'Inter', 'Segoe UI', sans-serif",
+    // --- ALTERATIONS START HERE ---
+    // Ensures the content pushes below the fixed header
+    paddingTop: "1px", 
+    // Sets the background image from the /public folder
+    backgroundImage: "url('/bg.png')",
+    // Ensures the image covers the whole area
+    backgroundSize: "cover",
+    // Keeps the image centered
+    backgroundPosition: "center",
+    // Prevents tiling
+    backgroundRepeat: "no-repeat",
+    // Ensures content is readable even if image is loading or transparent
+    backgroundColor: "#f4f7f6", 
+    // --- ALTERATIONS END HERE ---
   },
   header: {
     backgroundColor: "#0c2340",
@@ -143,7 +160,11 @@ const styles = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    boxShadow: "0 4px 12px rgba(0,0,0,0.1)"
+    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+    // Recommended if the background image scrolls with the page
+    position: "sticky", 
+    top: 0,
+    zIndex: 100
   },
   headerTitleContainer: {
     display: "flex",
@@ -198,13 +219,15 @@ const styles = {
   title: {
     margin: 0,
     fontSize: "1.6rem",
-    color: "#0c2340",
-    fontWeight: "700"
+    color: "#0c2340", // Dark text contrasts well with light background
+    fontWeight: "700",
+    textShadow: "0 1px 3px rgba(255,255,255,0.8)" // Added slight text shadow for readability over image
   },
   subtitle: {
     margin: "4px 0 0 0",
     fontSize: "0.95rem",
-    color: "#64748b"
+    color: "#334155", // Slightly darker for better contrast
+    textShadow: "0 1px 3px rgba(255,255,255,0.8)" 
   },
   filterGroup: {
     display: "flex",
@@ -217,7 +240,7 @@ const styles = {
     fontSize: "0.9rem",
     outline: "none",
     width: "220px",
-    backgroundColor: "#ffffff"
+    backgroundColor: "rgba(255, 255, 255, 0.9)", // Slightly translucent to see background
   },
   selectFilter: {
     padding: "10px 14px",
@@ -225,15 +248,16 @@ const styles = {
     border: "1px solid #cbd5e1",
     fontSize: "0.9rem",
     outline: "none",
-    backgroundColor: "#ffffff",
+    backgroundColor: "rgba(255, 255, 255, 0.9)", 
     cursor: "pointer"
   },
   card: {
-    backgroundColor: "#ffffff",
+    backgroundColor: "rgba(255, 255, 255, 0.92)", // High opacity white card so content is readable
     padding: "25px",
     borderRadius: "12px",
-    boxShadow: "0 10px 25px rgba(0,0,0,0.05)",
-    border: "1px solid #e2e8f0"
+    boxShadow: "0 10px 25px rgba(0,0,0,0.1)", // Stronger shadow to lift card off background
+    border: "1px solid #e2e8f0",
+    marginBottom: "40px"
   },
   tableResponsive: {
     overflowX: "auto"
@@ -245,7 +269,7 @@ const styles = {
   },
   th: {
     padding: "14px 12px",
-    backgroundColor: "#f8fafc",
+    backgroundColor: "rgba(248, 250, 252, 0.9)", // Slightly translucent header
     color: "#475569",
     fontSize: "0.85rem",
     fontWeight: "700",
@@ -260,7 +284,7 @@ const styles = {
     padding: "16px 12px",
     borderBottom: "1px solid #f1f5f9",
     fontSize: "0.95rem",
-    color: "#334155"
+    color: "#1e293b" // Darker text for readability
   },
   busBadge: {
     backgroundColor: "#eff6ff",
@@ -281,7 +305,8 @@ const styles = {
   noDataText: {
     textAlign: "center",
     padding: "40px",
-    color: "#64748b",
-    fontSize: "1rem"
+    color: "#475569",
+    fontSize: "1rem",
+    textShadow: "0 1px 3px rgba(255,255,255,0.8)"
   }
 };
