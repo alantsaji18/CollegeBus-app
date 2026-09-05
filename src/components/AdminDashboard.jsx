@@ -4,7 +4,7 @@ import "./AdminDashboard.css";
 
 import bus1 from "../assets/bus1.png";
 import bus2 from "../assets/bus2.png";
-import busBanner from "../assets/bus3.png";
+import busBanner from "../assets/bus3.png"; // This is the main banner image
 import bus3 from "../assets/bus-banner.png";
 
 import {
@@ -169,6 +169,12 @@ const AdminDashboard = () => {
             </Link>
           </li>
 
+          <li>
+            <Link to="/travelhistory">
+              Travel History
+            </Link>
+          </li>
+
         </ul>
 
         <div className="nav-right">
@@ -192,18 +198,18 @@ const AdminDashboard = () => {
       </nav>
 
       {/* ========================================================
-          BANNER
+          BANNER (Updated to use the correct asset)
       ======================================================== */}
 
       <div className="dashboard-banner">
 
         <img
-          src={busBanner}
+          src={busBanner} // Correct asset used for the background
           alt="Bus Banner"
           className="banner-img"
         />
 
-        <div className="banner-text">
+        <div className="banner-text overlay-text"> {/* Added overlay-text class for visibility */}
 
           <h2>
             College Bus Management System
@@ -564,6 +570,23 @@ const AdminDashboard = () => {
               }}
             >
               Filter
+            </button>
+
+            <button
+              type="button"
+              onClick={() => navigate("/travelhistory")}
+              style={{
+                background: "#4f46e5",
+                color: "white",
+                border: "none",
+                padding: "6px 12px",
+                borderRadius: "4px",
+                cursor: "pointer",
+                fontSize: "0.85rem",
+                fontWeight: "600",
+              }}
+            >
+              Show More
             </button>
 
           </div>
