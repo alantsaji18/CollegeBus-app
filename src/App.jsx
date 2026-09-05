@@ -11,6 +11,7 @@ import StudentLogin from './components/StudentLogin';
 import StaffLogin from './components/StaffLogin';
 import StudentDashboard from './components/StudentDashboard';
 import TravelHistory from './components/Travelhistory';
+import StaffDashboard from './components/StaffDashboard';
 import "leaflet/dist/leaflet.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
@@ -31,6 +32,7 @@ function App() {
         <Route path="/studentlogin" element={<StudentLogin />} />
         <Route path="/stafflogin" element={<StaffLogin />} />
         <Route path="/travelhistory" element={<TravelHistory />} />
+        <Route path="/staff-dashboard" element={<StaffDashboard />} />
       </Routes>
     </BrowserRouter>
   );
