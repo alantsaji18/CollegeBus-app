@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { authApi } from "../services/api";
+
 export default function AdminLogin() {
   const navigate = useNavigate();
 
@@ -10,12 +12,12 @@ export default function AdminLogin() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const admins = {
+  const adminsFallback = {
     admin1: "admin1@123",
     admin2: "admin2@123",
   };
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
 
     setError("");
@@ -39,32 +41,35 @@ export default function AdminLogin() {
       return;
     }
 
-    // Check username
-    if (!Object.prototype.hasOwnProperty.call(admins, enteredUsername)) {
-      setError(
-        "Login failed: The username you entered does not exist. Please check your username and try again."
-      );
-      return;
-    }
-
-    // Check password
-    if (admins[enteredUsername] !== enteredPassword) {
-      setError(
-        "Login failed: Incorrect password for this username. Please check your password and try again."
-      );
-      return;
-    }
-
-    // Successful login
     setLoading(true);
 
-    // Store login session
-    sessionStorage.setItem("adminLoggedIn", "true");
-    sessionStorage.setItem("adminUsername", enteredUsername);
+    try {
+      // Authenticate with Django backend
+      const res = await authApi.adminLogin(enteredUsername, enteredPassword);
+      if (res && res.success) {
+        sessionStorage.setItem("adminLoggedIn", "true");
+        sessionStorage.setItem("adminUsername", enteredUsername);
+        setTimeout(() => {
+          navigate("/admin");
+        }, 400);
+      }
+    } catch (err) {
+      // If backend is offline, check fallback credentials
+      if (!err.response && adminsFallback[enteredUsername] === enteredPassword) {
+        sessionStorage.setItem("adminLoggedIn", "true");
+        sessionStorage.setItem("adminUsername", enteredUsername);
+        setTimeout(() => {
+          navigate("/admin");
+        }, 400);
+        return;
+      }
 
-    setTimeout(() => {
-      navigate("/admin");
-    }, 500);
+      const serverError =
+        err.response?.data?.error ||
+        "Login failed: Incorrect username or password. Please check your credentials.";
+      setError(serverError);
+      setLoading(false);
+    }
   };
 
   return (

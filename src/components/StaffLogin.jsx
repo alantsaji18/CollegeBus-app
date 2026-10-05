@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { authApi } from "../services/api";
+
 export default function StaffLogin() {
   const navigate = useNavigate();
 
@@ -10,163 +12,105 @@ export default function StaffLogin() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
 
     setError("");
-    setLoading(false);
 
     const enteredUsername = username.trim();
     const enteredPassword = password;
 
-    /* =====================================================
-        1. CHECK EMPTY FIELDS
-    ===================================================== */
-
     if (!enteredUsername && !enteredPassword) {
-      setError(
-        "Please enter both staff ID/username and password."
-      );
+      setError("Please enter both staff ID/username and password.");
       return;
     }
 
     if (!enteredUsername) {
-      setError(
-        "Staff ID is required. Please enter your staff username or ID."
-      );
+      setError("Staff ID is required. Please enter your staff username or ID.");
       return;
     }
 
     if (!enteredPassword) {
-      setError(
-        "Password is required. Please enter your password."
-      );
+      setError("Password is required. Please enter your password.");
       return;
     }
-
-    /* =====================================================
-        2. GET STAFF CREATED BY ADMIN
-    ===================================================== */
-
-    let staffMembers = [];
-
-    try {
-      const savedStaff =
-        localStorage.getItem("staff");
-
-      if (savedStaff) {
-        staffMembers = JSON.parse(savedStaff);
-      }
-    } catch (error) {
-      console.error(
-        "Unable to read staff records:",
-        error
-      );
-
-      setError(
-        "Login failed: Staff records could not be loaded. Please try again."
-      );
-
-      return;
-    }
-
-    /* =====================================================
-        3. CHECK WHETHER STAFF RECORDS EXIST
-    ===================================================== */
-
-    if (!Array.isArray(staffMembers) || staffMembers.length === 0) {
-      setError(
-        "Login failed: No staff account is available. Please contact the administrator."
-      );
-      return;
-    }
-
-    /* =====================================================
-        4. FIND STAFF BY USERNAME / STAFF ID
-    ===================================================== */
-
-    const staff = staffMembers.find((item) => {
-      const storedUsername =
-        item.username ??
-        item.userName ??
-        item.Username ??
-        item.staffId ??
-        item.staffID ??
-        item.id ??
-        "";
-
-      return (
-        String(storedUsername).trim().toLowerCase() ===
-        enteredUsername.toLowerCase()
-      );
-    });
-
-    /* =====================================================
-        5. USERNAME DOES NOT EXIST
-    ===================================================== */
-
-    if (!staff) {
-      setError(
-        "Login failed: The staff username/ID you entered does not exist in the records. Please check and try again."
-      );
-      return;
-    }
-
-    /* =====================================================
-        6. GET STORED PASSWORD
-    ===================================================== */
-
-    const storedPassword =
-      staff.password ??
-      staff.Password ??
-      "";
-
-    /* =====================================================
-        7. CHECK PASSWORD
-    ===================================================== */
-
-    if (
-      String(storedPassword) !==
-      enteredPassword
-    ) {
-      setError(
-        "Login failed: Incorrect password for this staff account. Please check your password and try again."
-      );
-      return;
-    }
-
-    /* =====================================================
-        8. LOGIN SUCCESSFUL
-    ===================================================== */
 
     setLoading(true);
 
-    /* =====================================================
-        9. SAVE LOGIN SESSION
-    ===================================================== */
+    try {
+      const res = await authApi.staffLogin(enteredUsername, enteredPassword);
+      if (res && res.success && res.staff) {
+        sessionStorage.setItem("staffLoggedIn", "true");
+        sessionStorage.setItem("staffUsername", enteredUsername);
+        sessionStorage.setItem("loggedInStaff", JSON.stringify(res.staff));
 
-    sessionStorage.setItem(
-      "staffLoggedIn",
-      "true"
-    );
+        // Sync with local staff cache if present
+        try {
+          const savedStaff = localStorage.getItem("staff");
+          if (savedStaff) {
+            const staffMembers = JSON.parse(savedStaff);
+            const updatedStaff = staffMembers.map((s) => {
+              const sUser = s.username ?? s.userName ?? s.Username ?? s.staffId ?? s.staffID ?? s.id ?? "";
+              if (String(sUser).trim().toLowerCase() === enteredUsername.toLowerCase()) {
+                return { ...s, ...res.staff };
+              }
+              return s;
+            });
+            localStorage.setItem("staff", JSON.stringify(updatedStaff));
+          }
+        } catch (e) {
+          console.warn("Could not sync staff cache:", e);
+        }
 
-    sessionStorage.setItem(
-      "staffUsername",
-      enteredUsername
-    );
+        setTimeout(() => {
+          navigate("/staff-dashboard");
+        }, 400);
+        return;
+      }
+    } catch (apiErr) {
+      if (apiErr.response?.data?.error) {
+        setError(apiErr.response.data.error);
+        setLoading(false);
+        return;
+      }
 
-    sessionStorage.setItem(
-      "loggedInStaff",
-      JSON.stringify(staff)
-    );
+      // Offline fallback from localStorage
+      try {
+        const savedStaff = localStorage.getItem("staff");
+        const staffMembers = savedStaff ? JSON.parse(savedStaff) : [];
+        const staffIndex = staffMembers.findIndex((item) => {
+          const storedUsername =
+            item.username ?? item.userName ?? item.Username ?? item.staffId ?? item.staffID ?? item.id ?? "";
+          return String(storedUsername).trim().toLowerCase() === enteredUsername.toLowerCase();
+        });
 
-    /* =====================================================
-        10. GO TO STAFF DASHBOARD
-    ===================================================== */
+        if (staffIndex !== -1) {
+          const staff = staffMembers[staffIndex];
+          if (String(staff.password ?? staff.Password ?? "") === enteredPassword) {
+            const nowIso = new Date().toISOString();
+            staff.last_login = nowIso;
+            staff.lastLogin = nowIso;
+            staff.login_count = (staff.login_count || staff.loginCount || 0) + 1;
+            staff.loginCount = staff.login_count;
+            staffMembers[staffIndex] = staff;
+            localStorage.setItem("staff", JSON.stringify(staffMembers));
 
-    setTimeout(() => {
-      navigate("/staffdashboard");
-    }, 500);
+            sessionStorage.setItem("staffLoggedIn", "true");
+            sessionStorage.setItem("staffUsername", enteredUsername);
+            sessionStorage.setItem("loggedInStaff", JSON.stringify(staff));
+            setTimeout(() => {
+              navigate("/staff-dashboard");
+            }, 400);
+            return;
+          }
+        }
+      } catch {
+        // Fallback failed
+      }
+
+      setError("Login failed: Invalid staff credentials or server unreachable. Please try again.");
+      setLoading(false);
+    }
   };
 
   return (

@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { dashboardApi, travelReportsApi } from "../services/api";
 import "./AdminDashboard.css";
 
 import bus1 from "../assets/bus1.png";
@@ -29,72 +30,121 @@ const AdminDashboard = () => {
 
   const [reportSearch, setReportSearch] = useState("");
 
-  /*
-    Check whether the admin has successfully logged in.
-    AdminLogin.jsx stores this value in sessionStorage.
-  */
   const [isLoggedIn, setIsLoggedIn] = useState(
     sessionStorage.getItem("adminLoggedIn") === "true"
   );
 
-  const travelReports = [
-    {
-      id: "Bus-101",
-      route: "Campus → Angamaly",
-      driver: "Ravi",
-      arrival: "07:50 AM",
-      departure: "03:45 PM",
-      status: "On Time",
-      class: "status-on-time",
-    },
-    {
-      id: "Bus-102",
-      route: "Campus → Ernakulam",
-      driver: "Arun",
-      arrival: "08:05 AM",
-      departure: "03:55 PM",
-      status: "Delayed",
-      class: "status-delayed",
-    },
-    {
-      id: "Bus-103",
-      route: "Campus → Chalakkudy",
-      driver: "Meeran",
-      arrival: "07:55 AM",
-      departure: "03:50 PM",
-      status: "On Time",
-      class: "status-on-time",
-    },
-    {
-      id: "Bus-104",
-      route: "Campus → Kothamangalam",
-      driver: "Arjun",
-      arrival: "08:10 AM",
-      departure: "03:40 PM",
-      status: "Delayed",
-      class: "status-delayed",
-    },
-    {
-      id: "Bus-105",
-      route: "Campus → Muvattupuzha",
-      driver: "Athul",
-      arrival: "08:00 AM",
-      departure: "03:50 PM",
-      status: "On Time",
-      class: "status-on-time",
-    },
-  ];
+  const [stats, setStats] = useState({
+    totalStudents: 800,
+    totalBuses: 24,
+    totalStaff: 5,
+    onTimeRate: "98.5%",
+  });
+
+  // Travel History state
+  const [travelReports, setTravelReports] = useState([]);
+  const [reportsLoading, setReportsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const data = await dashboardApi.getStats();
+
+        if (data) {
+          setStats({
+            totalStudents: data.totalStudents,
+            totalBuses: data.totalBuses,
+            totalStaff: data.totalStaff,
+            onTimeRate: data.onTimeRate || "98.5%",
+          });
+        }
+      } catch (err) {
+        console.warn("Could not fetch live dashboard stats", err);
+      }
+    };
+
+    fetchStats();
+  }, []);
+
+  /*
+    ============================================================
+    FETCH TRAVEL HISTORY FROM DJANGO
+    ============================================================
+  */
+
+  useEffect(() => {
+    const fetchTravelReports = async () => {
+      try {
+        setReportsLoading(true);
+
+        const data = await travelReportsApi.getAll();
+
+        if (Array.isArray(data)) {
+          setTravelReports(data);
+        } else if (data && Array.isArray(data.results)) {
+          setTravelReports(data.results);
+        } else {
+          setTravelReports([]);
+        }
+      } catch (err) {
+        console.error("Could not fetch travel reports", err);
+        setTravelReports([]);
+      } finally {
+        setReportsLoading(false);
+      }
+    };
+
+    fetchTravelReports();
+  }, []);
+
+  /*
+    ============================================================
+    FILTER TRAVEL REPORTS
+    ============================================================
+  */
 
   const filteredReports = travelReports.filter((report) => {
     const q = reportSearch.toLowerCase();
 
+    const busId = String(
+      report.busNumber ||
+        report.busNo ||
+        report.id ||
+        ""
+    ).toLowerCase();
+
+    const route = String(report.route || "").toLowerCase();
+
+    const driver = String(
+      report.driver ||
+        report.driverName ||
+        ""
+    ).toLowerCase();
+
+    const arrival = String(
+      report.arrivalTime ||
+        report.arrival ||
+        ""
+    ).toLowerCase();
+
+    const departure = String(
+      report.departureTime ||
+        report.departure ||
+        ""
+    ).toLowerCase();
+
+    const status = String(
+      report.status ||
+        ""
+    ).toLowerCase();
+
     return (
-      report.id.toLowerCase().includes(q) ||
-      report.route.toLowerCase().includes(q) ||
-      report.driver.toLowerCase().includes(q) ||
-      report.arrival.toLowerCase().includes(q) ||
-      report.departure.toLowerCase().includes(q) ||
-      report.status.toLowerCase().includes(q)
+      busId.includes(q) ||
+      route.includes(q) ||
+      driver.includes(q) ||
+      arrival.includes(q) ||
+      departure.includes(q) ||
+      status.includes(q)
     );
   });
 
@@ -204,12 +254,12 @@ const AdminDashboard = () => {
       <div className="dashboard-banner">
 
         <img
-          src={busBanner} // Correct asset used for the background
+          src={busBanner}
           alt="Bus Banner"
           className="banner-img"
         />
 
-        <div className="banner-text overlay-text"> {/* Added overlay-text class for visibility */}
+        <div className="banner-text overlay-text">
 
           <h2>
             College Bus Management System
@@ -250,7 +300,7 @@ const AdminDashboard = () => {
             </h3>
 
             <p>
-              800
+              {stats.totalStudents}
             </p>
 
           </div>
@@ -278,7 +328,7 @@ const AdminDashboard = () => {
             </h3>
 
             <p>
-              24
+              {stats.totalBuses}
             </p>
 
           </div>
@@ -306,7 +356,7 @@ const AdminDashboard = () => {
             </h3>
 
             <p>
-              5
+              {stats.totalStaff}
             </p>
 
           </div>
@@ -629,40 +679,90 @@ const AdminDashboard = () => {
 
           <tbody>
 
-            {filteredReports.length > 0 ? (
+            {reportsLoading ? (
+
+              <tr>
+
+                <td
+                  colSpan="6"
+                  className="no-data"
+                  style={{
+                    textAlign: "center",
+                    padding: "20px",
+                  }}
+                >
+                  Loading travel reports...
+                </td>
+
+              </tr>
+
+            ) : filteredReports.length > 0 ? (
 
               filteredReports.map(
-                (report, index) => (
+                (report, index) => {
 
-                  <tr key={index}>
+                  const reportId =
+                    report.busNumber ||
+                    report.busNo ||
+                    report.id ||
+                    "-";
 
-                    <td>
-                      {report.id}
-                    </td>
+                  const arrival =
+                    report.arrivalTime ||
+                    report.arrival ||
+                    "-";
 
-                    <td>
-                      {report.route}
-                    </td>
+                  const departure =
+                    report.departureTime ||
+                    report.departure ||
+                    "-";
 
-                    <td>
-                      {report.driver}
-                    </td>
+                  const driver =
+                    report.driver ||
+                    report.driverName ||
+                    "-";
 
-                    <td>
-                      {report.arrival}
-                    </td>
+                  const status =
+                    report.status ||
+                    "-";
 
-                    <td>
-                      {report.departure}
-                    </td>
+                  const statusClass =
+                    status.toLowerCase().includes("delay")
+                      ? "status-delayed"
+                      : "status-on-time";
 
-                    <td className={report.class}>
-                      {report.status}
-                    </td>
+                  return (
+                    <tr
+                      key={report.id || index}
+                    >
 
-                  </tr>
+                      <td>
+                        {reportId}
+                      </td>
 
-                )
+                      <td>
+                        {report.route || "-"}
+                      </td>
+
+                      <td>
+                        {driver}
+                      </td>
+
+                      <td>
+                        {arrival}
+                      </td>
+
+                      <td>
+                        {departure}
+                      </td>
+
+                      <td className={statusClass}>
+                        {status}
+                      </td>
+
+                    </tr>
+                  );
+                }
               )
 
             ) : (

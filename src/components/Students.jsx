@@ -1,59 +1,82 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { studentsApi } from "../services/api";
 import "./Students.css";
+
+const defaultStudents = [
+  {
+    id: "FST-001",
+    name: "Rahul Kumar",
+    rollNo: "MCA101",
+    route: "ALuva",
+    stop: "Town Hall",
+    busNumber: "Bus-101",
+    department: "MCA",
+    className: "S3 MCA",
+    contactNumber: "9876543210",
+    password: "MCA101",
+  },
+  {
+    id: "FST-002",
+    name: "Ayan Das",
+    rollNo: "EEE105",
+    route: "Thrissur",
+    stop: "Chalakudy PUB",
+    busNumber: "Bus-102",
+    department: "B-Tech ",
+    className: "S6 EEE",
+    contactNumber: "9865231905",
+    password: "EEE105",
+  },
+  {
+    id: "FST-003",
+    name: "Rohan Mehta",
+    rollNo: "MECH101",
+    route: "Ernakulam",
+    stop: "Marine Drive",
+    busNumber: "Bus-108",
+    department: "B-Tech ",
+    className: "S6 MECH",
+    contactNumber: "9876587105",
+    password: "MECH101",
+  },
+  {
+    id: "FST-004",
+    name: "Rekha Sharma",
+    rollNo: "IMCA110",
+    route: "Muvattupuzha",
+    stop: "Town Junction",
+    busNumber: "Bus-106",
+    department: "IMCA",
+    className: "S1 IMCA",
+    contactNumber: "8815643210",
+    password: "IMCA110",
+  }
+];
 
 const Students = () => {
   const navigate = useNavigate();
-  const [students, setStudents] = useState([
-    {
-      id: "FST-001",
-      name: "Rahul Kumar",
-      rollNo: "MCA101",
-      route: "ALuva",
-      stop: "Town Hall",
-      busNumber: "Bus-101",
-      department: "MCA",
-      className: "S3 MCA",
-      contactNumber: "9876543210",
-      password: "MCA101",
-    },
-    {
-      id: "FST-002",
-      name: "Ayan Das",
-      rollNo: "EEE105",
-      route: "Thrissur",
-      stop: "Chalakudy PUB",
-      busNumber: "Bus-102",
-      department: "B-Tech ",
-      className: "S6 EEE",
-      contactNumber: "9865231905",
-      password: "EEE105",
-    },
-    {
-      id: "FST-003",
-      name: "Rohan Mehta",
-      rollNo: "MECH101",
-      route: "Ernakulam",
-      stop: "Marine Drive",
-      busNumber: "Bus-108",
-      department: "B-Tech ",
-      className: "S6 MECH",
-      contactNumber: "9876587105",
-      password: "MECH101",
-    },
-    {
-      id: "FST-004",
-      name: "Rekha Sharma",
-      rollNo: "IMCA110",
-      route: "Muvattupuzha",
-      stop: "Town Junction",
-      busNumber: "Bus-106",
-      department: "IMCA",
-      className: "S1 IMCA",
-      contactNumber: "8815643210",
-      password: "IMCA110",
+  const [students, setStudents] = useState(defaultStudents);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch students from Django backend
+  const loadStudents = async () => {
+    try {
+      setLoading(true);
+      const data = await studentsApi.getAll();
+      if (Array.isArray(data) && data.length > 0) {
+        setStudents(data);
+      }
+    } catch (err) {
+      console.warn("Backend not available, using local student cache", err);
+    } finally {
+      setLoading(false);
     }
-  ]);
+  };
+
+  useEffect(() => {
+    loadStudents();
+  }, []);
 
   const [formData, setFormData] = useState({
     id: "",
@@ -76,7 +99,7 @@ const Students = () => {
     setErrorMsg("");
   };
 
-  const handleRegister = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
 
     // 1. Check for empty fields
@@ -96,8 +119,8 @@ const Students = () => {
 
     // 3. Check for duplicate Student ID or Roll Number
     const isDuplicate = students.some(
-      (s) => s.id.toLowerCase() === formData.id.toLowerCase() || 
-             s.rollNo.toLowerCase() === formData.rollNo.toLowerCase()
+      (s) => (s.id && s.id.toLowerCase() === formData.id.toLowerCase()) || 
+             (s.rollNo && s.rollNo.toLowerCase() === formData.rollNo.toLowerCase())
     );
 
     if (isDuplicate) {
@@ -105,7 +128,14 @@ const Students = () => {
       return;
     }
 
-    setStudents([...students, formData]);
+    try {
+      const created = await studentsApi.create(formData);
+      setStudents([...students, created]);
+    } catch (err) {
+      console.warn("Failed to persist to Django API, saving locally:", err);
+      setStudents([...students, formData]);
+    }
+
     setFormData({
       id: "",
       name: "",
@@ -121,8 +151,13 @@ const Students = () => {
     setErrorMsg("");
   };
 
-  const handleDelete = (id) => {
-    setStudents(students.filter((student) => student.id !== id));
+  const handleDelete = async (id) => {
+    try {
+      await studentsApi.delete(id);
+    } catch (err) {
+      console.warn("Backend delete failed, removing locally:", err);
+    }
+    setStudents(students.filter((student) => student.id !== id && student.rollNo !== id));
   };
 
   const filteredStudents = students.filter((student) => {
@@ -309,7 +344,7 @@ const Students = () => {
               <tbody>
                 {filteredStudents.length > 0 ? (
                   filteredStudents.map((student) => (
-                    <tr key={student.id}>
+                    <tr key={student.id || student.rollNo}>
                       <td>{student.id}</td>
                       <td><strong>{student.name}</strong></td>
                       <td>{student.rollNo}</td>
@@ -321,7 +356,7 @@ const Students = () => {
                       <td>
                         <button
                           className="delete-btn"
-                          onClick={() => handleDelete(student.id)}
+                          onClick={() => handleDelete(student.id || student.rollNo)}
                         >
                           Delete
                         </button>

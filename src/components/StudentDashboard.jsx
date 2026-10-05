@@ -1,18 +1,27 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { bookingsApi } from "../services/api";
 
 export default function StudentDashboard() {
   const navigate = useNavigate();
 
-  const [student, setStudent] = useState({
-    name: "Alant",
-    rollNo: "CS2026",
-    busNumber: "Bus-101",
-    route: "Route A - FISAT to City",
-    stop: "Angamaly Town Junction",
-    department: "Computer Science",
-    className: "S6 MCA",
-    contactNumber: "9876543210"
+  const [student, setStudent] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem("loggedInStudent");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+    return {
+      name: "Alant",
+      rollNo: "CS2026",
+      busNumber: "Bus-101",
+      route: "Route A - FISAT to City",
+      stop: "Angamaly Town Junction",
+      department: "Computer Science",
+      className: "S6 MCA",
+      contactNumber: "9876543210"
+    };
   });
 
   const [activeTab, setActiveTab] = useState("overview");
@@ -65,15 +74,39 @@ export default function StudentDashboard() {
   const stopMarkersRef = useRef([]);
 
   useEffect(() => {
-    const savedBookings = localStorage.getItem("studentBookings");
-    if (savedBookings) {
+    const fetchBookings = async () => {
       try {
-        setMyBookings(JSON.parse(savedBookings));
+        const data = await bookingsApi.getAll({ studentRollNo: student.rollNo });
+        if (Array.isArray(data) && data.length > 0) {
+          setMyBookings(
+            data.map((b) => ({
+              id: b.id,
+              bookingId: b.id ? `BK-${b.id}` : "BK-101",
+              seatNo: b.seatNumber,
+              busNumber: b.busNumber,
+              route: student.route,
+              date: b.bookingDate,
+              time: b.tripTime,
+            }))
+          );
+          return;
+        }
       } catch (err) {
-        console.error("Failed to parse bookings", err);
+        console.warn("Backend bookings not available, using local cache", err);
       }
-    }
-  }, []);
+
+      const savedBookings = localStorage.getItem("studentBookings");
+      if (savedBookings) {
+        try {
+          setMyBookings(JSON.parse(savedBookings));
+        } catch (err) {
+          console.error("Failed to parse bookings", err);
+        }
+      }
+    };
+
+    fetchBookings();
+  }, [student.rollNo, student.route]);
 
   // Fetch full OSRM route passing through coordinates from FISAT to Athani
   useEffect(() => {
@@ -255,19 +288,44 @@ export default function StudentDashboard() {
     setSelectedSeat(selectedSeat === seat.id ? null : seat.id);
   };
 
-  const handleBookSeat = () => {
+  const handleBookSeat = async () => {
     if (!selectedSeat) {
       setBookingMessage("Please select a seat from the layout first.");
       return;
     }
+
+    const payload = {
+      studentRollNo: student.rollNo,
+      studentName: student.name,
+      busNumber: student.busNumber,
+      seatNumber: selectedSeat,
+      bookingDate: bookingDate,
+      tripTime: tripTime,
+    };
+
+    let bookingId = "BK-" + Math.floor(1000 + Math.random() * 9000);
+    let serverId = null;
+
+    try {
+      const res = await bookingsApi.create(payload);
+      if (res && res.id) {
+        serverId = res.id;
+        bookingId = `BK-${res.id}`;
+      }
+    } catch (err) {
+      console.warn("Could not persist booking to backend, using local state", err);
+    }
+
     const newBooking = {
-      bookingId: "BK-" + Math.floor(1000 + Math.random() * 9000),
+      id: serverId,
+      bookingId,
       seatNo: selectedSeat,
       busNumber: student.busNumber,
       route: student.route,
       date: bookingDate,
       time: tripTime,
     };
+
     const updatedBookings = [...myBookings, newBooking];
     setMyBookings(updatedBookings);
     localStorage.setItem("studentBookings", JSON.stringify(updatedBookings));
@@ -276,7 +334,15 @@ export default function StudentDashboard() {
     setSelectedSeat(null);
   };
 
-  const handleCancelBooking = (bookingId, seatNo) => {
+  const handleCancelBooking = async (bookingId, seatNo, id) => {
+    if (id) {
+      try {
+        await bookingsApi.delete(id);
+      } catch (err) {
+        console.warn("Backend booking delete failed:", err);
+      }
+    }
+
     const updatedBookings = myBookings.filter(b => b.bookingId !== bookingId);
     setMyBookings(updatedBookings);
     localStorage.setItem("studentBookings", JSON.stringify(updatedBookings));

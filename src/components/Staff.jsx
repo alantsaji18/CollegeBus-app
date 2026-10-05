@@ -1,27 +1,50 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { staffApi } from "../services/api";
 import "./Students.css";
+
+const defaultStaff = [
+  {
+    staffId: "STF-001",
+    name: "Ravi",
+    password: "password123",
+    designation: "Driver",
+    phoneNumber: "9876543210",
+    experience: "5 Years",
+  },
+  {
+    staffId: "STF-002",
+    name: "Suresh Kumar",
+    password: "password123",
+    designation: "GateStaff",
+    phoneNumber: "9812345678",
+    experience: "3 Years",
+  },
+];
 
 const Staff = () => {
   const navigate = useNavigate();
-  const [staffList, setStaffList] = useState([
-    {
-      staffId: "STF-001",
-      name: "Ravi",
-      password: "password123",
-      designation: "Driver",
-      phoneNumber: "9876543210",
-      experience: "5 Years",
-    },
-    {
-      staffId: "STF-002",
-      name: "Suresh Kumar",
-      password: "password123",
-      designation: "GateStaff",
-      phoneNumber: "9812345678",
-      experience: "3 Years",
-    },
-  ]);
+  const [staffList, setStaffList] = useState(defaultStaff);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch staff from Django backend
+  const loadStaff = async () => {
+    try {
+      setLoading(true);
+      const data = await staffApi.getAll();
+      if (Array.isArray(data) && data.length > 0) {
+        setStaffList(data);
+      }
+    } catch (err) {
+      console.warn("Backend not available, using fallback staff list", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadStaff();
+  }, []);
 
   const [formData, setFormData] = useState({
     staffId: "",
@@ -40,7 +63,7 @@ const Staff = () => {
     setErrorMsg("");
   };
 
-  const handleRegister = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
 
     // 1. Check for empty fields
@@ -60,7 +83,7 @@ const Staff = () => {
 
     // 3. Check for duplicate Staff ID
     const isDuplicate = staffList.some(
-      (s) => s.staffId.toLowerCase() === formData.staffId.toLowerCase()
+      (s) => s.staffId && s.staffId.toLowerCase() === formData.staffId.toLowerCase()
     );
 
     if (isDuplicate) {
@@ -68,7 +91,14 @@ const Staff = () => {
       return;
     }
 
-    setStaffList([...staffList, formData]);
+    try {
+      const created = await staffApi.create(formData);
+      setStaffList([...staffList, created]);
+    } catch (err) {
+      console.warn("Failed to persist to Django API, saving locally:", err);
+      setStaffList([...staffList, formData]);
+    }
+
     setFormData({
       staffId: "",
       name: "",
@@ -80,7 +110,12 @@ const Staff = () => {
     setErrorMsg("");
   };
 
-  const handleDelete = (staffId) => {
+  const handleDelete = async (staffId) => {
+    try {
+      await staffApi.delete(staffId);
+    } catch (err) {
+      console.warn("Backend delete failed, removing locally:", err);
+    }
     setStaffList(staffList.filter((staff) => staff.staffId !== staffId));
   };
 

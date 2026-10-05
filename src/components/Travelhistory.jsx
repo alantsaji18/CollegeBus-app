@@ -1,40 +1,47 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 // Assuming this CSS file contains general resets or FontAwesome imports
+import { travelReportsApi } from "../services/api";
 import "./Students.css";
 
 export default function TravelHistory() {
   const navigate = useNavigate();
 
-  // Initial mock data mirroring the staff travel reports shown on the admin dashboard
-  const [reports, setReports] = useState([
-    { id: "REP-501", busNo: "Bus-101", route: "Campus → Angamaly", driver: "Ravi", arrivalTime: "07:50 AM", departureTime: "03:45 PM", status: "On Time", date: "2026-09-05" },
-    { id: "REP-502", busNo: "Bus-102", route: "Campus → Ernakulam", driver: "Arun", arrivalTime: "08:05 AM", departureTime: "03:55 PM", status: "Delayed", date: "2026-09-05" },
-    { id: "REP-503", busNo: "Bus-103", route: "Campus → Chalakkudy", driver: "Meeran", arrivalTime: "07:55 AM", departureTime: "03:50 PM", status: "On Time", date: "2026-09-05" },
-    { id: "REP-504", busNo: "Bus-104", route: "Campus → Kothamangalam", driver: "Arjun", arrivalTime: "08:10 AM", departureTime: "03:40 PM", status: "Delayed", date: "2026-09-04" },
-    { id: "REP-505", busNo: "Bus-105", route: "Campus → Muvattupuzha", driver: "Athul", arrivalTime: "08:00 AM", departureTime: "03:50 PM", status: "On Time", date: "2026-09-04" },
-  ]);
-
+  const [reports, setReports] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
 
-  // Load any staff-entered logs from localStorage if applicable
+  // Load from Django backend
   useEffect(() => {
-    const savedReports = localStorage.getItem("staffTravelReports");
-    if (savedReports) {
+    const loadReports = async () => {
       try {
-        setReports(JSON.parse(savedReports));
+        const data = await travelReportsApi.getAll();
+        if (Array.isArray(data)) {
+          setReports(data);
+        } else if (data && Array.isArray(data.results)) {
+          setReports(data.results);
+        } else {
+          setReports([]);
+        }
       } catch (err) {
-        console.error("Failed to parse travel reports", err);
+        console.error("Error loading travel reports from backend:", err);
+        setReports([]);
       }
-    }
+    };
+
+    loadReports();
   }, []);
 
   const filteredReports = reports.filter((item) => {
+    const bus = String(item.busNo || item.busNumber || "").toLowerCase();
+    const route = String(item.route || "").toLowerCase();
+    const driver = String(item.driver || "").toLowerCase();
+    const query = searchTerm.toLowerCase();
+
     const matchesSearch = 
-      item.busNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.route.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.driver.toLowerCase().includes(searchTerm.toLowerCase());
+      bus.includes(query) ||
+      route.includes(query) ||
+      driver.includes(query);
     
     const matchesStatus = statusFilter === "All" || item.status === statusFilter;
 
@@ -101,10 +108,10 @@ export default function TravelHistory() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredReports.map((report) => (
-                    <tr key={report.id} style={styles.tr}>
-                      <td style={styles.td}><strong>{report.id}</strong></td>
-                      <td style={styles.td}><span style={styles.busBadge}>{report.busNo}</span></td>
+                  {filteredReports.map((report, idx) => (
+                    <tr key={report.id || report.reportId || idx} style={styles.tr}>
+                      <td style={styles.td}><strong>{report.id || report.reportId}</strong></td>
+                      <td style={styles.td}><span style={styles.busBadge}>{report.busNo || report.busNumber}</span></td>
                       <td style={styles.td}>{report.route}</td>
                       <td style={styles.td}>{report.driver}</td>
                       <td style={styles.td}>{report.arrivalTime}</td>

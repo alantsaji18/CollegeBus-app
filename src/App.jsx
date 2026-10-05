@@ -23,8 +23,10 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/admindashboard" element={<AdminDashboard />} />
         <Route path="/students" element={<Students />} />
         <Route path="/student-dashboard" element={<StudentDashboard />} />
+        <Route path="/studentsdashboard" element={<StudentDashboard />} />
         <Route path="/viewbus" element={<Buses />} />
         <Route path="/viewdriver" element={<Staff />} />
         <Route path="/livetracking" element={<LiveTracking />} />
@@ -33,6 +35,7 @@ function App() {
         <Route path="/stafflogin" element={<StaffLogin />} />
         <Route path="/travelhistory" element={<TravelHistory />} />
         <Route path="/staff-dashboard" element={<StaffDashboard />} />
+        <Route path="/staffdashboard" element={<StaffDashboard />} />
       </Routes>
     </BrowserRouter>
   );

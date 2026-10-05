@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { authApi } from "../services/api";
+
 export default function StudentLogin() {
   const navigate = useNavigate();
 
@@ -10,160 +12,105 @@ export default function StudentLogin() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
 
     setError("");
-    setLoading(false);
 
     const enteredUsername = username.trim();
     const enteredPassword = password;
 
-    /* =====================================================
-        1. CHECK EMPTY FIELDS
-    ===================================================== */
-
     if (!enteredUsername && !enteredPassword) {
-      setError(
-        "Please enter both roll number and password."
-      );
+      setError("Please enter both roll number and password.");
       return;
     }
 
     if (!enteredUsername) {
-      setError(
-        "Roll number is required. Please enter your student roll number."
-      );
+      setError("Roll number is required. Please enter your student roll number.");
       return;
     }
 
     if (!enteredPassword) {
-      setError(
-        "Password is required. Please enter your password."
-      );
+      setError("Password is required. Please enter your password.");
       return;
     }
-
-    /* =====================================================
-        2. GET STUDENTS CREATED BY ADMIN
-    ===================================================== */
-
-    let students = [];
-
-    try {
-      const savedStudents =
-        localStorage.getItem("students");
-
-      if (savedStudents) {
-        students = JSON.parse(savedStudents);
-      }
-    } catch (error) {
-      console.error(
-        "Unable to read student records:",
-        error
-      );
-
-      setError(
-        "Login failed: Student records could not be loaded. Please try again."
-      );
-
-      return;
-    }
-
-    /* =====================================================
-        3. CHECK WHETHER STUDENT RECORDS EXIST
-    ===================================================== */
-
-    if (!Array.isArray(students) || students.length === 0) {
-      setError(
-        "Login failed: No student account is available. Please contact the administrator."
-      );
-      return;
-    }
-
-    /* =====================================================
-        4. FIND STUDENT BY ROLL NUMBER (USERNAME)
-    ===================================================== */
-
-    const student = students.find((item) => {
-      const storedRollNo =
-        item.rollNo ??
-        item.rollno ??
-        item.RollNo ??
-        "";
-
-      return (
-        String(storedRollNo).trim().toLowerCase() ===
-        enteredUsername.toLowerCase()
-      );
-    });
-
-    /* =====================================================
-        5. ROLL NUMBER DOES NOT EXIST
-    ===================================================== */
-
-    if (!student) {
-      setError(
-        "Login failed: The roll number you entered does not exist in the student records. Please check your roll number and try again."
-      );
-      return;
-    }
-
-    /* =====================================================
-        6. GET STORED PASSWORD
-    ===================================================== */
-
-    const storedPassword =
-      student.password ??
-      student.Password ??
-      "";
-
-    /* =====================================================
-        7. CHECK PASSWORD
-    ===================================================== */
-
-    if (
-      String(storedPassword) !==
-      enteredPassword
-    ) {
-      setError(
-        "Login failed: Incorrect password for this roll number. Please check your password and try again."
-      );
-      return;
-    }
-
-    /* =====================================================
-        8. LOGIN SUCCESSFUL
-    ===================================================== */
 
     setLoading(true);
 
-    /* =====================================================
-        9. SAVE LOGIN SESSION
-    ===================================================== */
+    try {
+      const res = await authApi.studentLogin(enteredUsername, enteredPassword);
+      if (res && res.success && res.student) {
+        sessionStorage.setItem("studentLoggedIn", "true");
+        sessionStorage.setItem("studentUsername", enteredUsername);
+        sessionStorage.setItem("loggedInStudent", JSON.stringify(res.student));
 
-    sessionStorage.setItem(
-      "studentLoggedIn",
-      "true"
-    );
+        // Sync with local student cache if present
+        try {
+          const savedStudents = localStorage.getItem("students");
+          if (savedStudents) {
+            const students = JSON.parse(savedStudents);
+            const updatedStudents = students.map((s) => {
+              const sRoll = s.rollNo ?? s.rollno ?? s.RollNo ?? "";
+              if (String(sRoll).trim().toLowerCase() === enteredUsername.toLowerCase()) {
+                return { ...s, ...res.student };
+              }
+              return s;
+            });
+            localStorage.setItem("students", JSON.stringify(updatedStudents));
+          }
+        } catch (e) {
+          console.warn("Could not sync student cache:", e);
+        }
 
-    sessionStorage.setItem(
-      "studentUsername",
-      enteredUsername
-    );
+        setTimeout(() => {
+          navigate("/student-dashboard");
+        }, 400);
+        return;
+      }
+    } catch (apiErr) {
+      // If server returned a business validation error (e.g. invalid rollNo or password)
+      if (apiErr.response?.data?.error) {
+        setError(apiErr.response.data.error);
+        setLoading(false);
+        return;
+      }
 
-    sessionStorage.setItem(
-      "loggedInStudent",
-      JSON.stringify(student)
-    );
+      // If server unreachable, check fallback from localStorage
+      try {
+        const savedStudents = localStorage.getItem("students");
+        const students = savedStudents ? JSON.parse(savedStudents) : [];
+        const studentIndex = students.findIndex((item) => {
+          const storedRollNo = item.rollNo ?? item.rollno ?? item.RollNo ?? "";
+          return String(storedRollNo).trim().toLowerCase() === enteredUsername.toLowerCase();
+        });
 
-    /* =====================================================
-        10. GO TO STUDENT DASHBOARD
-    ===================================================== */
+        if (studentIndex !== -1) {
+          const student = students[studentIndex];
+          if (String(student.password ?? student.Password ?? "") === enteredPassword) {
+            const nowIso = new Date().toISOString();
+            student.last_login = nowIso;
+            student.lastLogin = nowIso;
+            student.login_count = (student.login_count || student.loginCount || 0) + 1;
+            student.loginCount = student.login_count;
+            students[studentIndex] = student;
+            localStorage.setItem("students", JSON.stringify(students));
 
-    setTimeout(() => {
-      navigate("/studentsdashboard");
-    }, 500);
+            sessionStorage.setItem("studentLoggedIn", "true");
+            sessionStorage.setItem("studentUsername", enteredUsername);
+            sessionStorage.setItem("loggedInStudent", JSON.stringify(student));
+            setTimeout(() => {
+              navigate("/student-dashboard");
+            }, 400);
+            return;
+          }
+        }
+      } catch {
+        // Fallback failed
+      }
+
+      setError("Login failed: Invalid credentials or unable to reach server. Please try again.");
+      setLoading(false);
+    }
   };
 
   return (

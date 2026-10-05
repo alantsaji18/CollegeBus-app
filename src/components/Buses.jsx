@@ -1,71 +1,94 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { busesApi } from "../services/api";
 import "./Students.css";
+
+const defaultBuses = [
+  {
+    busId: "Bus-101",
+    driverName: "Ravi",
+    startingPlace: "Campus",
+    endingPlace: "Ernakulam",
+    route: "Ernakulam",
+    driversContactNumber: "9876543210",
+    capacity: "50",
+    status: "Active",
+  },
+  {
+    busId: "Bus-102",
+    driverName: "Arun",
+    startingPlace: "Campus",
+    endingPlace: "Thrissur",
+    route: "Thrissur",
+    driversContactNumber: "9865231905",
+    capacity: "45",
+    status: "Maintenance",
+  },
+  {
+    busId: "Bus-103",
+    driverName: "Meeran",
+    startingPlace: "Campus",
+    endingPlace: "Chalakkudy",
+    route: "Chalakkudy",
+    driversContactNumber: "9876543210",
+    capacity: "60",
+    status: "Maintenance",
+  },
+  {
+    busId: "Bus-104",
+    driverName: "Raju",
+    startingPlace: "Campus",
+    endingPlace: "Kothamangalam",
+    route: "Kothamangalam",
+    driversContactNumber: "9877631910",
+    capacity: "40",
+    status: "Active",
+  },
+  {
+    busId: "Bus-105",
+    driverName: "Rajesh",
+    startingPlace: "Campus",
+    endingPlace: "Muvattupuzha",
+    route: "Muvattupuzha",
+    driversContactNumber: "9876884506",
+    capacity: "48",
+    status: "Active",
+  },
+  {
+    busId: "Bus-106",
+    driverName: "Aravind",
+    startingPlace: "Ernakulam",
+    endingPlace: "Campus",
+    route: "Ernakulam",
+    driversContactNumber: "9877013210",
+    capacity: "50",
+    status: "Maintenance",
+  },
+];
 
 const Buses = () => {
   const navigate = useNavigate();
-  const [buses, setBuses] = useState([
-    {
-      busId: "Bus-101",
-      driverName: "Ravi",
-      startingPlace: "Campus",
-      endingPlace: "Ernakulam",
-      route: "Ernakulam",
-      driversContactNumber: "9876543210",
-      capacity: "50",
-      status: "Active",
-    },
-    {
-      busId: "Bus-102",
-      driverName: "Arun",
-      startingPlace: "Campus",
-      endingPlace: "Thrissur",
-      route: "Thrissur",
-      driversContactNumber: "9865231905",
-      capacity: "45",
-      status: "Maintenance",
-    },
-    {
-      busId: "Bus-103",
-      driverName: "Meeran",
-      startingPlace: "Campus",
-      endingPlace: "Chalakkudy",
-      route: "Chalakkudy",
-      driversContactNumber: "9876543210",
-      capacity: "60",
-      status: "Maintenance",
-    },
-    {
-      busId: "Bus-104",
-      driverName: "Raju",
-      startingPlace: "Campus",
-      endingPlace: "Kothamangalam",
-      route: "Kothamangalam",
-      driversContactNumber: "9877631910",
-      capacity: "40",
-      status: "Active",
-    },
-    {
-      busId: "Bus-105",
-      driverName: "Rajesh",
-      startingPlace: "Campus",
-      endingPlace: "Muvattupuzha",
-      route: "Muvattupuzha",
-      driversContactNumber: "9876884506",
-      capacity: "48",
-      status: "Active",
-    },
-    {
-      busId: "Bus-106",
-      driverName: "Aravind",
-      startingPlace: "Ernakulam",
-      endingPlace: "Campus",
-      route: "Ernakulam",
-      driversContactNumber: "9877013210",
-      capacity: "50",
-      status: "Maintenance",
-    },
-  ]);
+  const [buses, setBuses] = useState(defaultBuses);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch buses from Django backend
+  const loadBuses = async () => {
+    try {
+      setLoading(true);
+      const data = await busesApi.getAll();
+      if (Array.isArray(data) && data.length > 0) {
+        setBuses(data);
+      }
+    } catch (err) {
+      console.warn("Backend not available, using fallback buses", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadBuses();
+  }, []);
 
   const [formData, setFormData] = useState({
     busId: "",
@@ -86,7 +109,7 @@ const Buses = () => {
     setErrorMsg("");
   };
 
-  const handleRegister = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
 
     // 1. Check for empty fields
@@ -106,7 +129,7 @@ const Buses = () => {
 
     // 3. Check for duplicate Bus ID
     const isDuplicate = buses.some(
-      (b) => b.busId.toLowerCase() === formData.busId.toLowerCase()
+      (b) => b.busId && b.busId.toLowerCase() === formData.busId.toLowerCase()
     );
 
     if (isDuplicate) {
@@ -114,7 +137,14 @@ const Buses = () => {
       return;
     }
 
-    setBuses([...buses, formData]);
+    try {
+      const created = await busesApi.create(formData);
+      setBuses([...buses, created]);
+    } catch (err) {
+      console.warn("Failed to persist to Django API, saving locally:", err);
+      setBuses([...buses, formData]);
+    }
+
     setFormData({
       busId: "",
       driverName: "",
@@ -128,7 +158,12 @@ const Buses = () => {
     setErrorMsg("");
   };
 
-  const handleDelete = (busId) => {
+  const handleDelete = async (busId) => {
+    try {
+      await busesApi.delete(busId);
+    } catch (err) {
+      console.warn("Backend delete failed, removing locally:", err);
+    }
     setBuses(buses.filter((bus) => bus.busId !== busId));
   };
 

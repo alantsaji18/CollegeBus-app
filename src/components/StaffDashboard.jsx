@@ -1,15 +1,24 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { travelReportsApi } from "../services/api";
 
 export default function StaffDashboard() {
   const navigate = useNavigate();
 
-  const [staff, setStaff] = useState({
-    name: "Sreedeviamma P.",
-    staffId: "SEC-GATE-04",
-    designation: "Chief Gate Transit & Security Officer",
-    department: "Main Security Gate Control",
-    contact: "+91 9447987654"
+  const [staff, setStaff] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem("loggedInStaff");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+    return {
+      name: "Sreedeviamma P.",
+      staffId: "SEC-GATE-04",
+      designation: "Chief Gate Transit & Security Officer",
+      department: "Main Security Gate Control",
+      contact: "+91 9447987654"
+    };
   });
 
   const [activeTab, setActiveTab] = useState("overview");
@@ -25,15 +34,33 @@ export default function StaffDashboard() {
 
   const [selectedTrackingBus, setSelectedTrackingBus] = useState("Bus-101");
 
-  const initialTravelHistory = [
-    { reportId: "REP-501", busNumber: "Bus-101", route: "Campus → Angamaly", driver: "Ravi", arrivalTime: "07:50 AM", departureTime: "03:45 PM", date: "2026-09-05", status: "On Time" },
-    { reportId: "REP-502", busNumber: "Bus-102", route: "Campus → Ernakulam", driver: "Arun", arrivalTime: "08:05 AM", departureTime: "03:55 PM", date: "2026-09-05", status: "Delayed" },
-    { reportId: "REP-503", busNumber: "Bus-103", route: "Campus → Chalakkudy", driver: "Meeran", arrivalTime: "07:55 AM", departureTime: "03:50 PM", date: "2026-09-05", status: "On Time" },
-    { reportId: "REP-504", busNumber: "Bus-104", route: "Campus → Kothamangalam", driver: "Arjun", arrivalTime: "08:10 AM", departureTime: "03:40 PM", date: "2026-09-04", status: "Delayed" },
-    { reportId: "REP-505", busNumber: "Bus-105", route: "Campus → Muvattupuzha", driver: "Athul", arrivalTime: "08:00 AM", departureTime: "03:50 PM", date: "2026-09-04", status: "On Time" },
-  ];
+  const [travelHistory, setTravelHistory] = useState([]);
 
-  const [travelHistory, setTravelHistory] = useState(initialTravelHistory);
+  const fetchHistory = async () => {
+    try {
+      const data = await travelReportsApi.getAll();
+      const list = Array.isArray(data) ? data : (data?.results || []);
+      setTravelHistory(
+        list.map((r) => ({
+          reportId: r.reportId || r.id,
+          busNumber: r.busNumber || r.busNo,
+          route: r.route || "",
+          driver: r.driver || "",
+          arrivalTime: r.arrivalTime || "",
+          departureTime: r.departureTime || "",
+          date: r.date || "",
+          status: r.status || "On Time",
+        }))
+      );
+    } catch (err) {
+      console.error("Could not fetch reports from backend", err);
+      setTravelHistory([]);
+    }
+  };
+
+  useEffect(() => {
+    fetchHistory();
+  }, []);
 
   // Search & Filter States
   const [searchQuery, setSearchQuery] = useState("");
@@ -76,19 +103,7 @@ export default function StaffDashboard() {
     });
   };
 
-  useEffect(() => {
-    const saved = localStorage.getItem("gateStaffTravelHistoryData");
-    if (saved) {
-      try { 
-        const parsed = JSON.parse(saved);
-        setTravelHistory(removeDuplicates(parsed)); 
-      } catch (e) { 
-        console.error(e); 
-      }
-    } else {
-      setTravelHistory(removeDuplicates(initialTravelHistory));
-    }
-  }, []);
+
 
   // Fetch OSRM route dynamically
   useEffect(() => {
@@ -182,7 +197,7 @@ export default function StaffDashboard() {
   }, [osrmRouteCoords, currentStepIndex, selectedTrackingBus]);
 
   // Save or Update Gate Record
-  const handleSaveRecord = (e) => {
+  const handleSaveRecord = async (e) => {
     e.preventDefault();
 
     const matchingFleetBus = fleetBuses.find(b => b.id === formBusNo);
@@ -191,27 +206,33 @@ export default function StaffDashboard() {
       return;
     }
 
+    const payload = {
+      busNo: formBusNo,
+      busNumber: formBusNo,
+      route: formRoute,
+      driver: formDriver,
+      arrivalTime: formArrival || "Pending",
+      departureTime: formDeparture || "Pending",
+      date: formDate,
+      status: formStatus
+    };
+
     if (editingReportId) {
       // Update existing record
-      const updated = travelHistory.map(item => {
-        if (item.reportId === editingReportId) {
-          return {
-            ...item,
-            busNumber: formBusNo,
-            route: formRoute,
-            driver: formDriver,
-            arrivalTime: formArrival || "Pending",
-            departureTime: formDeparture || "Pending",
-            date: formDate,
-            status: formStatus
-          };
-        }
-        return item;
-      });
-      setTravelHistory(updated);
-      localStorage.setItem("gateStaffTravelHistoryData", JSON.stringify(updated));
-      setMessage({ text: `Gate record ${editingReportId} successfully updated!`, type: "success" });
-      setEditingReportId(null);
+      try {
+        await travelReportsApi.update(editingReportId, payload);
+        await fetchHistory();
+        setMessage({ text: `Gate record ${editingReportId} successfully updated!`, type: "success" });
+        setEditingReportId(null);
+        // Reset form fields
+        setFormArrival("");
+        setFormDeparture("");
+        setActiveTab("history");
+      } catch (err) {
+        console.error("Could not update travel report on backend:", err);
+        const errDetail = err?.response?.data ? JSON.stringify(err.response.data) : (err.message || "Failed to update record in database.");
+        setMessage({ text: `Error updating record in database: ${errDetail}`, type: "error" });
+      }
     } else {
       // Create new record
       const isDuplicate = travelHistory.some(item => item.busNumber === formBusNo && item.date === formDate);
@@ -220,27 +241,24 @@ export default function StaffDashboard() {
         return;
       }
 
-      const newReport = {
-        reportId: "REP-" + Math.floor(506 + Math.random() * 400),
-        busNumber: formBusNo,
-        route: formRoute,
-        driver: formDriver,
-        arrivalTime: formArrival || "Pending",
-        departureTime: formDeparture || "Pending",
-        date: formDate,
-        status: formStatus
-      };
-
-      const updated = removeDuplicates([newReport, ...travelHistory]);
-      setTravelHistory(updated);
-      localStorage.setItem("gateStaffTravelHistoryData", JSON.stringify(updated));
-      setMessage({ text: `Gate travel record ${newReport.reportId} successfully recorded for ${formBusNo}!`, type: "success" });
+      try {
+        const created = await travelReportsApi.create(payload);
+        if (created) {
+          await fetchHistory();
+          setMessage({ text: `Saved Successfully: Gate travel record ${created.reportId || created.id || formBusNo} recorded for ${formBusNo}!`, type: "success" });
+          // Reset form fields
+          setFormArrival("");
+          setFormDeparture("");
+          setActiveTab("history");
+        } else {
+          throw new Error("No response received from server.");
+        }
+      } catch (err) {
+        console.error("Could not persist new travel report to backend:", err);
+        const errDetail = err?.response?.data ? JSON.stringify(err.response.data) : (err.message || "Failed to save record to database.");
+        setMessage({ text: `Error saving record to database: ${errDetail}`, type: "error" });
+      }
     }
-
-    // Reset form fields
-    setFormArrival("");
-    setFormDeparture("");
-    setActiveTab("history");
   };
 
   const handleStartEdit = (item) => {
@@ -258,11 +276,17 @@ export default function StaffDashboard() {
   const handleLogout = () => navigate("/stafflogin");
 
   const filteredHistory = travelHistory.filter(item => {
+    const bus = String(item.busNumber || item.busNo || "").toLowerCase();
+    const route = String(item.route || "").toLowerCase();
+    const driver = String(item.driver || "").toLowerCase();
+    const repId = String(item.reportId || item.id || "").toLowerCase();
+    const q = searchQuery.toLowerCase();
+
     const matchesSearch = 
-      item.busNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.route.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.driver.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.reportId.toLowerCase().includes(searchQuery.toLowerCase());
+      bus.includes(q) ||
+      route.includes(q) ||
+      driver.includes(q) ||
+      repId.includes(q);
     
     const matchesStatus = statusFilter === "All" || item.status === statusFilter;
     const matchesDate = !dateFilter || item.date === dateFilter;
@@ -323,8 +347,8 @@ export default function StaffDashboard() {
               <div style={styles.infoRow}><strong>Staff Name:</strong> <span>{staff.name}</span></div>
               <div style={styles.infoRow}><strong>Gate ID:</strong> <span style={{ color: "#1a73e8", fontWeight: "bold" }}>{staff.staffId}</span></div>
               <div style={styles.infoRow}><strong>Designation:</strong> <span>{staff.designation}</span></div>
-              <div style={styles.infoRow}><strong>Duty Station:</strong> <span>{staff.department}</span></div>
-              <div style={styles.infoRow}><strong>Emergency Contact:</strong> <span>{staff.contact}</span></div>
+              <div style={styles.infoRow}><strong>Duty Station:</strong> <span>{staff.department || "Gate Control"}</span></div>
+              <div style={styles.infoRow}><strong>Emergency Contact:</strong> <span>{staff.contact || staff.phoneNumber || "N/A"}</span></div>
             </div>
             <div style={styles.card}>
               <h3 style={styles.cardTitle}>Gatekeeper Guidelines</h3>

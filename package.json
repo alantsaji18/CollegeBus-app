@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "backend": "python backend/manage.py runserver 127.0.0.1:8000",
+    "seed": "python backend/manage.py seed_data",
     "lint": "eslint .",
     "preview": "vite preview"
   },
