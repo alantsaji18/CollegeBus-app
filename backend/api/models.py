@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Q
 # from django.utils import timezone
 
 class AdminUser(models.Model):
@@ -102,6 +103,7 @@ class TravelReport(models.Model):
     date = models.CharField(max_length=50)
     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default="On Time")
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.report_id} - {self.bus_number} ({self.date})"
@@ -116,6 +118,15 @@ class SeatBooking(models.Model):
     trip_time = models.CharField(max_length=100)
     status = models.CharField(max_length=50, default="Confirmed")
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=('bus_number', 'seat_number', 'booking_date', 'trip_time'),
+                condition=Q(status='Confirmed'),
+                name='uniq_booking_bus_seat_day_trip',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.student_roll_no} - Seat {self.seat_number} - {self.bus_number}"
@@ -168,5 +179,3 @@ class DailyLoginCount(models.Model):
 
     def __str__(self):
         return f"{self.user_type.capitalize()} {self.user_id} on {self.date}: {self.login_count} logins"
-
-

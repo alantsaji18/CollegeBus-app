@@ -1,4 +1,8 @@
+from datetime import date
+from zoneinfo import ZoneInfo
+
 from rest_framework import serializers
+from django.utils import timezone
 from .models import AdminUser, Student, Bus, Staff, TravelReport, SeatBooking, BusLocation, LoginHistory, DailyLoginCount
 
 class AdminUserSerializer(serializers.ModelSerializer):
@@ -126,7 +130,9 @@ class TravelReportSerializer(serializers.ModelSerializer):
             'date',
             'status',
             'created_at',
+            'updated_at',
         ]
+        read_only_fields = ['created_at', 'updated_at']
 
     def create(self, validated_data):
         if not validated_data.get('report_id'):
@@ -137,6 +143,18 @@ class TravelReportSerializer(serializers.ModelSerializer):
                 report_id = f"REP-{500 + count}"
             validated_data['report_id'] = report_id
         return super().create(validated_data)
+
+    def validate(self, attrs):
+        report_date = attrs.get('date', getattr(self.instance, 'date', None))
+        try:
+            parsed_date = date.fromisoformat(report_date)
+        except (TypeError, ValueError):
+            raise serializers.ValidationError({'date': 'Enter a valid date in YYYY-MM-DD format.'})
+
+        today = timezone.localdate(timezone=ZoneInfo('Asia/Kolkata'))
+        if parsed_date > today:
+            raise serializers.ValidationError({'date': 'Travel reports cannot be dated in the future.'})
+        return attrs
 
 
 class SeatBookingSerializer(serializers.ModelSerializer):
@@ -160,6 +178,56 @@ class SeatBookingSerializer(serializers.ModelSerializer):
             'status',
             'created_at',
         ]
+        extra_kwargs = {
+            'status': {'read_only': True},
+        }
+        validators = []
+
+    def validate(self, attrs):
+        booking_fields = ('bus_number', 'seat_number', 'booking_date', 'trip_time')
+        values = {
+            field: attrs.get(field, getattr(self.instance, field, None))
+            for field in booking_fields
+        }
+
+        if self.instance is None or any(field in attrs for field in booking_fields):
+            bookings = SeatBooking.objects.filter(
+                **values,
+                status='Confirmed',
+            )
+            if self.instance is not None:
+                bookings = bookings.exclude(pk=self.instance.pk)
+            if bookings.exists():
+                raise serializers.ValidationError({
+                    'seatNumber': 'This seat is already booked for this bus, date, and trip.'
+                })
+
+        try:
+            booking_date = date.fromisoformat(values['booking_date'])
+        except (TypeError, ValueError):
+            raise serializers.ValidationError({
+                'bookingDate': 'Enter a valid booking date in YYYY-MM-DD format.'
+            })
+
+        local_now = timezone.localtime(timezone.now(), ZoneInfo('Asia/Kolkata'))
+        if booking_date == local_now.date():
+            cutoff_by_trip = {
+                'Morning (07:45 AM)': (7 * 60 + 30, '7:30 AM'),
+                'Evening (04:15 PM)': (15 * 60 + 30, '3:30 PM'),
+            }
+            cutoff = cutoff_by_trip.get(values['trip_time'])
+            if cutoff:
+                cutoff_minutes, cutoff_label = cutoff
+                current_minutes = local_now.hour * 60 + local_now.minute
+                if current_minutes > cutoff_minutes:
+                    raise serializers.ValidationError({
+                        'tripTime': (
+                            f"Today's {values['trip_time'].split(' ')[0].lower()} "
+                            f"bookings closed at {cutoff_label} India time."
+                        )
+                    })
+
+        return attrs
 
 
 class BusLocationSerializer(serializers.ModelSerializer):
@@ -215,5 +283,3 @@ class DailyLoginCountSerializer(serializers.ModelSerializer):
             'login_count',
             'loginCount',
         ]
-
-

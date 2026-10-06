@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { authApi } from "../services/api";
@@ -50,7 +50,7 @@ export default function AdminLogin() {
         sessionStorage.setItem("adminLoggedIn", "true");
         sessionStorage.setItem("adminUsername", enteredUsername);
         setTimeout(() => {
-          navigate("/admin");
+          navigate("/admin", { replace: true });
         }, 400);
       }
     } catch (err) {
@@ -59,7 +59,7 @@ export default function AdminLogin() {
         sessionStorage.setItem("adminLoggedIn", "true");
         sessionStorage.setItem("adminUsername", enteredUsername);
         setTimeout(() => {
-          navigate("/admin");
+          navigate("/admin", { replace: true });
         }, 400);
         return;
       }

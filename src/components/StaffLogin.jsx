@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { authApi } from "../services/api";
@@ -63,7 +63,7 @@ export default function StaffLogin() {
         }
 
         setTimeout(() => {
-          navigate("/staff-dashboard");
+          navigate("/staff-dashboard", { replace: true });
         }, 400);
         return;
       }
@@ -99,7 +99,7 @@ export default function StaffLogin() {
             sessionStorage.setItem("staffUsername", enteredUsername);
             sessionStorage.setItem("loggedInStaff", JSON.stringify(staff));
             setTimeout(() => {
-              navigate("/staff-dashboard");
+              navigate("/staff-dashboard", { replace: true });
             }, 400);
             return;
           }

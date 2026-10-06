@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { authApi } from "../services/api";
@@ -63,7 +63,7 @@ export default function StudentLogin() {
         }
 
         setTimeout(() => {
-          navigate("/student-dashboard");
+          navigate("/student-dashboard", { replace: true });
         }, 400);
         return;
       }
@@ -99,7 +99,7 @@ export default function StudentLogin() {
             sessionStorage.setItem("studentUsername", enteredUsername);
             sessionStorage.setItem("loggedInStudent", JSON.stringify(student));
             setTimeout(() => {
-              navigate("/student-dashboard");
+              navigate("/student-dashboard", { replace: true });
             }, 400);
             return;
           }

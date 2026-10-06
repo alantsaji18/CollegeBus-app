@@ -1,6 +1,54 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { bookingsApi } from "../services/api";
+import { bookingsApi, busesApi } from "../services/api";
+import { toTrackingBus } from "../services/busRoutes";
+
+const INDIA_TIME_ZONE = "Asia/Kolkata";
+const STUDENT_STOP_COORDINATES = {
+  "town hall": [9.9952, 76.2898],
+  "chalakudy pub": [10.307, 76.337],
+  "marine drive": [9.9816, 76.2762],
+  "church jn": [10.0645, 76.6239],
+  "post office": [9.9865, 76.5775],
+  "angamaly town junction": [10.19, 76.38],
+  anagamaly: [10.19, 76.38],
+  aluva: [10.107, 76.351],
+  kidangoor: [9.815, 76.535],
+};
+
+const getStudentStopCoordinates = (stop) =>
+  STUDENT_STOP_COORDINATES[String(stop || "").trim().toLowerCase()] || null;
+
+const getDistanceMeters = (first, second) => {
+  const radians = (degrees) => (degrees * Math.PI) / 180;
+  const latitudeDifference = radians(second[0] - first[0]);
+  const longitudeDifference = radians(second[1] - first[1]);
+  const arc =
+    Math.sin(latitudeDifference / 2) ** 2 +
+    Math.cos(radians(first[0])) *
+      Math.cos(radians(second[0])) *
+      Math.sin(longitudeDifference / 2) ** 2;
+
+  return 6_371_000 * 2 * Math.atan2(Math.sqrt(arc), Math.sqrt(1 - arc));
+};
+
+const getIndiaDateTime = (date) => {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: INDIA_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+
+  return {
+    date: `${values.year}-${values.month}-${values.day}`,
+    minutes: Number(values.hour) * 60 + Number(values.minute),
+  };
+};
 
 export default function StudentDashboard() {
   const navigate = useNavigate();
@@ -26,11 +74,10 @@ export default function StudentDashboard() {
 
   const [activeTab, setActiveTab] = useState("overview");
 
-  const getTodayString = () => new Date().toISOString().split("T")[0];
+  const getTodayString = () => getIndiaDateTime(new Date()).date;
   const getTomorrowString = () => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().split("T")[0];
+    const [year, month, day] = getTodayString().split("-").map(Number);
+    return new Date(Date.UTC(year, month - 1, day + 1)).toISOString().split("T")[0];
   };
 
   const [travelDirection, setTravelDirection] = useState("North-Bound (Morning Sun on Right)");
@@ -40,31 +87,94 @@ export default function StudentDashboard() {
   const [selectedSeat, setSelectedSeat] = useState(null);
   const [bookingDate, setBookingDate] = useState(getTodayString());
   const [tripTime, setTripTime] = useState("Morning (07:45 AM)");
-  
+  const [currentTime, setCurrentTime] = useState(() => getIndiaDateTime(new Date()));
+  const [loadedAvailabilityKey, setLoadedAvailabilityKey] = useState("");
+  const [seatAvailabilityErrorKey, setSeatAvailabilityErrorKey] = useState("");
+  const availabilityKey = `${student.busNumber}|${bookingDate}|${tripTime}`;
+  const seatAvailabilityReady = loadedAvailabilityKey === availabilityKey;
+  const seatAvailabilityError = seatAvailabilityErrorKey === availabilityKey;
+  const bookingCutoff = tripTime.includes("Morning") ? 7 * 60 + 30 : 15 * 60 + 30;
+  const bookingCutoffLabel = tripTime.includes("Morning") ? "7:30 AM" : "3:30 PM";
+  const bookingWindowClosed =
+    bookingDate === currentTime.date && currentTime.minutes > bookingCutoff;
+  const isBookingCancellationClosed = (booking) => {
+    if (!booking?.date) return false;
+    if (booking.date < currentTime.date) return true;
+    if (booking.date > currentTime.date) return false;
+
+    const cutoff = booking.time?.includes("Morning") ? 7 * 60 + 30 : 15 * 60 + 30;
+    return currentTime.minutes > cutoff;
+  };
+
   const [myBookings, setMyBookings] = useState([]);
   const [bookingMessage, setBookingMessage] = useState("");
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setCurrentTime(getIndiaDateTime(new Date()));
+    }, 15_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const [busMatrix, setBusMatrix] = useState([
+    [{ id: "1,1", status: "available" }, { id: "1,2", status: "available" }, { id: "1,3", status: "available" }, { id: "1,4", status: "available" }, { id: "1,5", status: "available" }, { id: "1,6", status: "available" }],
+    [{ id: "2,1", status: "available" }, { id: "2,2", status: "available" }, { id: "2,3", status: "available" }, { id: "2,4", status: "available" }, { id: "2,5", status: "available" }, { id: "2,6", status: "available" }],
+    [{ id: "3,1", status: "available" }, { id: "3,2", status: "available" }, { id: "3,3", status: "available" }, { id: "3,4", status: "available" }, { id: "3,5", status: "available" }, { id: "3,6", status: "available" }],
+    [{ id: "4,1", status: "available" }, { id: "4,2", status: "available" }, { id: "4,3", status: "available" }, { id: "4,4", status: "available" }, { id: "4,5", status: "available" }, { id: "4,6", status: "available" }],
+    [{ id: "5,1", status: "available" }, { id: "5,2", status: "available" }, { id: "5,3", status: "available" }, { id: "5,4", status: "available" }, { id: "5,5", status: "available" }, { id: "5,6", status: "available" }],
+    [{ id: "6,1", status: "available" }, { id: "6,2", status: "available" }, { id: "6,3", status: "available" }, { id: "6,4", status: "available" }, { id: "6,5", status: "available" }, { id: "6,6", status: "available" }],
+    [{ id: "7,1", status: "available" }, { id: "7,2", status: "available" }, { id: "7,3", status: "available" }, { id: "7,4", status: "available" }, { id: "7,5", status: "available" }, { id: "7,6", status: "available" }],
+    [{ id: "8,1", status: "available" }, { id: "8,2", status: "available" }, { id: "8,3", status: "available" }, { id: "8,4", status: "available" }, { id: "8,5", status: "available" }, { id: "8,6", status: "available" }],
+  ]);
+
   // OSRM & Leaflet Map States starting from FISAT College
   const [osrmRouteCoords, setOsrmRouteCoords] = useState([]);
-  const [osrmDistance, setOsrmDistance] = useState("Calculating...");
-  const [osrmDuration, setOsrmDuration] = useState("Calculating...");
   const [busProgressIndex, setBusProgressIndex] = useState(0);
-  const [currentActiveStopIndex, setCurrentActiveStopIndex] = useState(0);
+  const [studentStopRoute, setStudentStopRoute] = useState(null);
+  const [trackingBus, setTrackingBus] = useState(null);
+  const [trackingError, setTrackingError] = useState("");
+  const [routedBusId, setRoutedBusId] = useState("");
 
-  // 11 Waypoints: Starting explicitly at Federal Institute of Science and Technology (FISAT), Hormis Nagar, Mookannoor, Angamaly
-  const routeStops = [
-    { name: "FISAT College, Hormis Nagar, Mookannoor, Angamaly (Start)", coords: [10.2315, 76.4150] },
-    { name: "Mookannoor Center", coords: [10.2405, 76.4161] },
-    { name: "Azhakom Junction", coords: [10.2220, 76.3980] },
-    { name: "Karukutty Church Stop", coords: [10.2050, 76.3910] },
-    { name: "Kanjirakkad Junction", coords: [10.1890, 76.3850] },
-    { name: "Angamaly Basilica Point", coords: [10.1900, 76.3800] },
-    { name: "Angamaly KSRTC Bus Stand", coords: [10.1925, 76.3870] },
-    { name: "Angamaly Railway Station Road", coords: [10.1830, 76.3840] },
-    { name: "Adup Kutty Junction", coords: [10.1710, 76.3760] },
-    { name: "Nedumbassery Airport Bypass", coords: [10.1550, 76.3650] },
-    { name: "Athani Junction (Final Stop)", coords: [10.1410, 76.3550] }
-  ];
+  const routeStops = useMemo(() => {
+    const studentStopCoordinates = getStudentStopCoordinates(student.stop);
+    if (
+      !trackingBus ||
+      trackingBus.routePath.some((coordinate) => !coordinate) ||
+      !studentStopCoordinates
+    ) return [];
+    return [
+      { name: `${trackingBus.startingPlace} (Start)`, coords: trackingBus.routePath[0] },
+      { name: student.stop, coords: studentStopCoordinates },
+      { name: `${trackingBus.endingPlace} (Destination)`, coords: trackingBus.routePath[1] },
+    ];
+  }, [trackingBus, student.stop]);
+
+  const studentStopReached = Boolean(
+    studentStopRoute &&
+    routedBusId === student.busNumber &&
+    busProgressIndex >= studentStopRoute.stopIndex
+  );
+  const studentStopRemainingDistance = studentStopRoute && routedBusId === student.busNumber
+    ? Math.max(
+        studentStopRoute.cumulativeDistances[studentStopRoute.stopIndex] -
+          (studentStopRoute.cumulativeDistances[busProgressIndex] || 0),
+        0
+      )
+    : null;
+  const studentStopDistance = studentStopRemainingDistance === null
+    ? "Calculating..."
+    : `${(studentStopRemainingDistance / 1000).toFixed(1)} km`;
+  const studentStopEta = studentStopReached
+    ? `Arrived at ${student.stop}`
+    : studentStopRemainingDistance === null
+      ? "Calculating..."
+      : `${Math.ceil(
+          studentStopRoute.stopDurationSeconds *
+          (studentStopRoute.cumulativeDistances[studentStopRoute.stopIndex]
+            ? studentStopRemainingDistance / studentStopRoute.cumulativeDistances[studentStopRoute.stopIndex]
+            : 0) /
+          60
+        )} mins`;
   
   const mapRef = useRef(null);
   const leafletMapInstance = useRef(null);
@@ -77,20 +187,21 @@ export default function StudentDashboard() {
     const fetchBookings = async () => {
       try {
         const data = await bookingsApi.getAll({ studentRollNo: student.rollNo });
-        if (Array.isArray(data) && data.length > 0) {
-          setMyBookings(
-            data.map((b) => ({
-              id: b.id,
-              bookingId: b.id ? `BK-${b.id}` : "BK-101",
-              seatNo: b.seatNumber,
-              busNumber: b.busNumber,
-              route: student.route,
-              date: b.bookingDate,
-              time: b.tripTime,
-            }))
-          );
-          return;
+        if (!Array.isArray(data)) {
+          throw new Error("Unexpected bookings response.");
         }
+        setMyBookings(
+          data.map((b) => ({
+            id: b.id,
+            bookingId: b.id ? `BK-${b.id}` : "BK-101",
+            seatNo: b.seatNumber,
+            busNumber: b.busNumber,
+            route: student.route,
+            date: b.bookingDate,
+            time: b.tripTime,
+          }))
+        );
+        return;
       } catch (err) {
         console.warn("Backend bookings not available, using local cache", err);
       }
@@ -108,38 +219,161 @@ export default function StudentDashboard() {
     fetchBookings();
   }, [student.rollNo, student.route]);
 
-  // Fetch full OSRM route passing through coordinates from FISAT to Athani
   useEffect(() => {
-    if (activeTab === "tracking") {
-      const coordinatesString = routeStops.map(s => `${s.coords[1]},${s.coords[0]}`).join(";");
+    let isCurrentRequest = true;
 
-      const fetchOSRMRoute = async () => {
-        try {
-          const response = await fetch(
-            `https://router.project-osrm.org/route/v1/driving/${coordinatesString}?overview=full&geometries=geojson`
-          );
-          const data = await response.json();
-          if (data.routes && data.routes.length > 0) {
-            const routeObj = data.routes[0];
-            setOsrmDistance((routeObj.distance / 1000).toFixed(1) + " km");
-            setOsrmDuration(Math.ceil(routeObj.duration / 60) + " mins");
-
-            const coords = routeObj.geometry.coordinates.map(coord => [coord[1], coord[0]]);
-            setOsrmRouteCoords(coords);
-            setBusProgressIndex(0);
-          }
-        } catch (error) {
-          console.error("Error fetching OSRM route:", error);
-          const fallback = routeStops.map(s => s.coords);
-          setOsrmRouteCoords(fallback);
-          setOsrmDistance("16.5 km");
-          setOsrmDuration("34 mins");
+    const fetchSeatAvailability = async () => {
+      try {
+        const bookings = await bookingsApi.getAll({
+          busNumber: student.busNumber,
+          date: bookingDate,
+          tripTime,
+        });
+        if (!Array.isArray(bookings)) {
+          throw new Error("Unexpected seat availability response.");
         }
-      };
 
-      fetchOSRMRoute();
-    }
-  }, [activeTab]);
+        if (isCurrentRequest) {
+          setSelectedSeat(null);
+          const bookedSeats = new Set(bookings.map((booking) => booking.seatNumber));
+          setBusMatrix((currentMatrix) =>
+            currentMatrix.map((row) =>
+              row.map((seat) => ({
+                ...seat,
+                status: bookedSeats.has(seat.id) ? "sold" : "available",
+              }))
+            )
+          );
+          setSeatAvailabilityErrorKey("");
+          setLoadedAvailabilityKey(availabilityKey);
+        }
+      } catch (err) {
+        console.error("Could not load seat availability:", err);
+        if (isCurrentRequest) {
+          setSeatAvailabilityErrorKey(availabilityKey);
+          setBookingMessage("Could not load seat availability. Please try again.");
+        }
+      }
+    };
+
+    fetchSeatAvailability();
+    return () => {
+      isCurrentRequest = false;
+    };
+  }, [student.busNumber, bookingDate, tripTime, availabilityKey]);
+
+  useEffect(() => {
+    if (activeTab !== "tracking") return undefined;
+
+    let isCurrentRequest = true;
+    busesApi.getAll()
+      .then((data) => {
+        if (!Array.isArray(data)) {
+          throw new Error("Unexpected bus list response.");
+        }
+        const bus = data.find((item) => (item.busId || item.bus_id) === student.busNumber);
+        if (!bus) {
+          throw new Error(`Assigned bus ${student.busNumber} is not registered in api_bus.`);
+        }
+        const resolvedBus = toTrackingBus(bus);
+        if (resolvedBus.routePath.some((coordinate) => !coordinate)) {
+          throw new Error(`A map location is not configured for ${resolvedBus.startingPlace} or ${resolvedBus.endingPlace}.`);
+        }
+        if (!getStudentStopCoordinates(student.stop)) {
+          throw new Error(`A map location is not configured for your stop: ${student.stop || "not set"}.`);
+        }
+        if (isCurrentRequest) {
+          setRoutedBusId("");
+          setTrackingError("");
+          setTrackingBus(resolvedBus);
+        }
+      })
+      .catch((error) => {
+        console.error("Could not load the assigned bus from api_bus:", error);
+        if (isCurrentRequest) {
+          setOsrmRouteCoords([]);
+          setStudentStopRoute(null);
+          setRoutedBusId("");
+          setTrackingError(error.message || "Could not load the assigned bus route.");
+        }
+      });
+
+    return () => {
+      isCurrentRequest = false;
+    };
+  }, [activeTab, student.busNumber, student.stop]);
+
+  // Fetch the road route using the assigned bus's api_bus endpoints.
+  useEffect(() => {
+    if (
+      activeTab !== "tracking" ||
+      !trackingBus ||
+      trackingBus.busId !== student.busNumber ||
+      routeStops.length !== 3
+    ) return undefined;
+
+    let isCurrentRoute = true;
+    const coordinatesString = routeStops.map((stop) => `${stop.coords[1]},${stop.coords[0]}`).join(";");
+
+    const fetchOSRMRoute = async () => {
+      try {
+        const response = await fetch(
+          `https://router.project-osrm.org/route/v1/driving/${coordinatesString}?overview=full&geometries=geojson`
+        );
+        if (!response.ok) {
+          throw new Error(`Road route request failed with status ${response.status}.`);
+        }
+        const data = await response.json();
+        const route = data.routes?.[0];
+        if (!route?.geometry?.coordinates?.length) {
+          throw new Error("No road route was returned for the assigned bus.");
+        }
+        if (isCurrentRoute) {
+          const coordinates = route.geometry.coordinates.map(([longitude, latitude]) => [latitude, longitude]);
+          const snappedStop = data.waypoints?.[1]?.location;
+          const stopCoordinate = snappedStop
+            ? [snappedStop[1], snappedStop[0]]
+            : routeStops[1].coords;
+          const stopIndex = coordinates.reduce((closestIndex, coordinate, index) => {
+            const closestDistance = getDistanceMeters(coordinates[closestIndex], stopCoordinate);
+            const candidateDistance = getDistanceMeters(coordinate, stopCoordinate);
+            return candidateDistance < closestDistance ? index : closestIndex;
+          }, 0);
+          const cumulativeDistances = [0];
+          for (let index = 1; index < coordinates.length; index += 1) {
+            cumulativeDistances.push(
+              cumulativeDistances[index - 1] + getDistanceMeters(coordinates[index - 1], coordinates[index])
+            );
+          }
+          const toStopLeg = route.legs?.[0];
+          setOsrmRouteCoords(coordinates);
+          setBusProgressIndex(0);
+          setRoutedBusId(trackingBus.busId);
+          setStudentStopRoute({
+            stopIndex,
+            stopDistanceMeters: toStopLeg?.distance ?? cumulativeDistances[stopIndex],
+            stopDurationSeconds: toStopLeg?.duration ?? route.duration,
+            cumulativeDistances,
+            snappedStop: stopCoordinate,
+          });
+          setTrackingError("");
+        }
+      } catch (error) {
+        console.error(`Could not load road route for ${trackingBus.busId}:`, error);
+        if (isCurrentRoute) {
+          setOsrmRouteCoords([]);
+          setRoutedBusId("");
+          setStudentStopRoute(null);
+          setTrackingError("Road routing is unavailable; the assigned bus route could not be displayed.");
+        }
+      }
+    };
+
+    fetchOSRMRoute();
+    return () => {
+      isCurrentRoute = false;
+    };
+  }, [activeTab, trackingBus, student.busNumber, routeStops]);
 
   // Initialize Leaflet Map Instance
   useEffect(() => {
@@ -162,9 +396,9 @@ export default function StudentDashboard() {
     }
   }, [activeTab]);
 
-  // Render Route, All 11 Stops, and Bus Emoji Marker
+  // Render the registered route endpoints and bus marker.
   useEffect(() => {
-    if (leafletMapInstance.current && osrmRouteCoords.length > 0 && window.L) {
+    if (leafletMapInstance.current && window.L) {
       const map = leafletMapInstance.current;
 
       if (completedPolylineRef.current) map.removeLayer(completedPolylineRef.current);
@@ -172,6 +406,10 @@ export default function StudentDashboard() {
       if (busMarkerRef.current) map.removeLayer(busMarkerRef.current);
       stopMarkersRef.current.forEach(m => map.removeLayer(m));
       stopMarkersRef.current = [];
+      completedPolylineRef.current = null;
+      remainingPolylineRef.current = null;
+      busMarkerRef.current = null;
+      if (!osrmRouteCoords.length || !routeStops.length || routedBusId !== student.busNumber) return;
 
       completedPolylineRef.current = window.L.polyline([], {
         color: '#cbd5e1',
@@ -195,7 +433,10 @@ export default function StudentDashboard() {
           iconAnchor: [13, 13]
         });
 
-        const marker = window.L.marker(stop.coords, { icon: stopIcon })
+        const markerPosition = idx === 1 && studentStopRoute?.snappedStop
+          ? studentStopRoute.snappedStop
+          : stop.coords;
+        const marker = window.L.marker(markerPosition, { icon: stopIcon })
           .addTo(map)
           .bindPopup(`<b>Stop ${idx + 1}: ${stop.name}</b><br/>FISAT Transit Network`);
         
@@ -212,11 +453,16 @@ export default function StudentDashboard() {
       busMarkerRef.current = window.L.marker(routeStops[0].coords, { icon: busEmojiIcon }).addTo(map);
       map.fitBounds(remainingPolylineRef.current.getBounds(), { padding: [50, 50] });
     }
-  }, [osrmRouteCoords]);
+  }, [osrmRouteCoords, routeStops, routedBusId, student.busNumber, studentStopRoute]);
 
   useEffect(() => {
     let interval;
-    if (activeTab === "tracking" && osrmRouteCoords.length > 0 && busMarkerRef.current) {
+    if (
+      activeTab === "tracking" &&
+      routedBusId === student.busNumber &&
+      osrmRouteCoords.length > 0 &&
+      busMarkerRef.current
+    ) {
       interval = setInterval(() => {
         setBusProgressIndex((prevIndex) => {
           const nextIndex = prevIndex >= osrmRouteCoords.length - 1 ? 0 : prevIndex + 1;
@@ -236,59 +482,80 @@ export default function StudentDashboard() {
             remainingPolylineRef.current.setLatLngs(upcomingCoords);
           }
 
-          const calculatedStopIndex = Math.floor((nextIndex / osrmRouteCoords.length) * routeStops.length);
-          setCurrentActiveStopIndex(Math.min(calculatedStopIndex, routeStops.length - 1));
-
           return nextIndex;
         });
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [activeTab, osrmRouteCoords]);
+  }, [activeTab, osrmRouteCoords, routeStops.length, routedBusId, student.busNumber]);
 
-  const handleLogout = () => navigate("/studentlogin");
-
-  const [busMatrix, setBusMatrix] = useState([
-    [{ id: "1,1", status: "available" }, { id: "1,2", status: "available" }, { id: "1,3", status: "available" }, { id: "1,4", status: "available" }, { id: "1,5", status: "available" }, { id: "1,6", status: "sold" }],
-    [{ id: "2,1", status: "available" }, { id: "2,2", status: "available" }, { id: "2,3", status: "available" }, { id: "2,4", status: "available" }, { id: "2,5", status: "available" }, { id: "2,6", status: "available" }],
-    [{ id: "3,1", status: "available" }, { id: "3,2", status: "available" }, { id: "3,3", status: "available" }, { id: "3,4", status: "sold" }, { id: "3,5", status: "sold" }, { id: "3,6", status: "sold" }],
-    [{ id: "4,1", status: "available" }, { id: "4,2", status: "available" }, { id: "4,3", status: "available" }, { id: "4,4", status: "available" }, { id: "4,5", status: "available" }, { id: "4,6", status: "available" }],
-    [{ id: "5,1", status: "available" }, { id: "5,2", status: "available" }, { id: "5,3", status: "available" }, { id: "5,4", status: "available" }, { id: "5,5", status: "sold" }, { id: "5,6", status: "sold" }],
-    [{ id: "6,1", status: "sold" }, { id: "6,2", status: "available" }, { id: "6,3", status: "available" }, { id: "6,4", status: "available" }, { id: "6,5", status: "available" }, { id: "6,6", status: "available" }],
-    [{ id: "7,1", status: "available" }, { id: "7,2", status: "available" }, { id: "7,3", status: "available" }, { id: "7,4", status: "available" }, { id: "7,5", status: "available" }, { id: "7,6", status: "available" }],
-    [{ id: "8,1", status: "sold" }, { id: "8,2", status: "sold" }, { id: "8,3", status: "available" }, { id: "8,4", status: "available" }, { id: "8,5", status: "available" }, { id: "8,6", status: "sold" }],
-  ]);
+  const handleLogout = () => {
+    sessionStorage.removeItem("studentLoggedIn");
+    sessionStorage.removeItem("studentUsername");
+    sessionStorage.removeItem("loggedInStudent");
+    navigate("/studentlogin", { replace: true });
+  };
 
   const handleRunRandomForestPrediction = (e) => {
     e.preventDefault();
+    const exposureByDirection = {
+      "North-Bound (Morning Sun on Right)": (row, column) => ({
+        high: column >= 4 && row >= 5,
+        moderate: column >= 4,
+      }),
+      "South-Bound (Morning Sun on Left)": (row, column) => ({
+        high: column <= 3 && row >= 5,
+        moderate: column <= 3,
+      }),
+      "East-Bound (Direct Front Glare)": (row) => ({
+        high: row <= 2,
+        moderate: row <= 4,
+      }),
+      "West-Bound (Afternoon Sun Glare)": (row) => ({
+        high: row >= 7,
+        moderate: row >= 5,
+      }),
+    };
+    const getExposure = exposureByDirection[travelDirection];
     const newMap = {};
     busMatrix.forEach((row) => {
       row.forEach((seat) => {
-        const [r, c] = seat.id.split(",").map(Number);
-        let riskScore = "green";
-        if (c >= 4 && tripTime.includes("Morning")) {
-          riskScore = r > 4 ? "red" : "yellow";
-        } else {
-          riskScore = (r + c) % 2 === 0 ? "green" : "yellow";
-        }
-        newMap[seat.id] = riskScore;
+        const [seatRow, seatColumn] = seat.id.split(",").map(Number);
+        const exposure = getExposure(seatRow, seatColumn);
+        newMap[seat.id] = exposure.high
+          ? "red"
+          : exposure.moderate
+            ? "yellow"
+            : "green";
       });
     });
     setPredictedSunlightMap(newMap);
     setPredictionDone(true);
-    setBookingMessage("Random Forest Sunlight Model executed successfully!");
+    setBookingMessage(`Sunlight prediction updated for ${travelDirection}.`);
   };
 
   const handleSeatClick = (rowIdx, colIdx, seat) => {
-    if (seat.status === "disabled" || seat.status === "sold") return;
+    if (!seatAvailabilityReady || bookingWindowClosed || seat.status === "disabled" || seat.status === "sold") return;
+    const nextSelectedSeat = selectedSeat === seat.id ? null : seat.id;
     const updated = busMatrix.map((row, rIdx) =>
-      row.map((s, cIdx) => (rIdx === rowIdx && cIdx === colIdx ? { ...s, status: s.status === "selected" ? "available" : "selected" } : s))
+      row.map((s, cIdx) => {
+        if (s.status === "sold") return s;
+        return {
+          ...s,
+          status: rIdx === rowIdx && cIdx === colIdx && nextSelectedSeat ? "selected" : "available",
+        };
+      })
     );
     setBusMatrix(updated);
-    setSelectedSeat(selectedSeat === seat.id ? null : seat.id);
+    setSelectedSeat(nextSelectedSeat);
   };
 
   const handleBookSeat = async () => {
+    if (bookingWindowClosed) {
+      setBookingMessage(`Today's ${tripTime.includes("Morning") ? "morning" : "evening"} bookings closed at ${bookingCutoffLabel} India time.`);
+      return;
+    }
+
     if (!selectedSeat) {
       setBookingMessage("Please select a seat from the layout first.");
       return;
@@ -303,22 +570,31 @@ export default function StudentDashboard() {
       tripTime: tripTime,
     };
 
-    let bookingId = "BK-" + Math.floor(1000 + Math.random() * 9000);
-    let serverId = null;
-
+    let res;
     try {
-      const res = await bookingsApi.create(payload);
-      if (res && res.id) {
-        serverId = res.id;
-        bookingId = `BK-${res.id}`;
-      }
+      res = await bookingsApi.create(payload);
     } catch (err) {
-      console.warn("Could not persist booking to backend, using local state", err);
+      console.error("Could not book the selected seat:", err);
+      const message =
+        err.response?.data?.seatNumber?.[0] ||
+        err.response?.data?.tripTime?.[0] ||
+        err.response?.data?.detail ||
+        "Booking failed. Please try again.";
+      setBookingMessage(message);
+      if (message.includes("already booked")) {
+        setBusMatrix((currentMatrix) =>
+          currentMatrix.map((row) =>
+            row.map((seat) => seat.id === selectedSeat ? { ...seat, status: "sold" } : seat)
+          )
+        );
+        setSelectedSeat(null);
+      }
+      return;
     }
 
     const newBooking = {
-      id: serverId,
-      bookingId,
+      id: res.id,
+      bookingId: `BK-${res.id}`,
       seatNo: selectedSeat,
       busNumber: student.busNumber,
       route: student.route,
@@ -334,19 +610,36 @@ export default function StudentDashboard() {
     setSelectedSeat(null);
   };
 
-  const handleCancelBooking = async (bookingId, seatNo, id) => {
+  const handleCancelBooking = async (bookingId, seatNo, id, booking) => {
+    if (isBookingCancellationClosed(booking)) {
+      setBookingMessage(`Cancellation for this trip closed at ${booking.time?.includes("Morning") ? "7:30 AM" : "3:30 PM"} India time.`);
+      return;
+    }
+
     if (id) {
       try {
         await bookingsApi.delete(id);
       } catch (err) {
-        console.warn("Backend booking delete failed:", err);
+        console.error("Backend booking cancellation failed:", err);
+        setBookingMessage("Cancellation failed. Please try again.");
+        return;
       }
     }
 
     const updatedBookings = myBookings.filter(b => b.bookingId !== bookingId);
     setMyBookings(updatedBookings);
     localStorage.setItem("studentBookings", JSON.stringify(updatedBookings));
-    setBusMatrix(busMatrix.map(row => row.map(s => s.id === seatNo ? { ...s, status: "available" } : s)));
+    if (
+      booking?.busNumber === student.busNumber &&
+      booking?.date === bookingDate &&
+      booking?.time === tripTime
+    ) {
+      setBusMatrix((currentMatrix) =>
+        currentMatrix.map((row) =>
+          row.map((seat) => seat.id === seatNo ? { ...seat, status: "available" } : seat)
+        )
+      );
+    }
     setBookingMessage(`Booking ${bookingId} cancelled.`);
   };
 
@@ -462,7 +755,7 @@ export default function StudentDashboard() {
               <h3 style={styles.cardTitle}><i className="fas fa-clock" style={{ color: "#0c2340", marginRight: "8px" }}></i> Daily Transit Schedule</h3>
               <ul style={styles.scheduleList}>
                 <li><strong>Dispatch (FISAT Campus):</strong> 07:45 AM</li>
-                <li><strong>Total Transit Stops:</strong> 11 Marked Waypoints</li>
+                <li><strong>Route Stops:</strong> Origin and destination from the registered bus</li>
                 <li><strong>Evening Return:</strong> 04:15 PM from Angamaly / City</li>
                 <li><strong>Status:</strong> <span style={{ color: "#10b981", fontWeight: "bold" }}>Active GPS Service</span></li>
               </ul>
@@ -475,21 +768,32 @@ export default function StudentDashboard() {
             <div style={styles.googleMapHeaderBar}>
               <div>
                 <h3 style={{ ...styles.cardTitle, margin: 0 }}><i className="fas fa-map-marked-alt" style={{ color: "#1a73e8", marginRight: "8px" }}></i> Live Transit for {student.name} ({student.busNumber})</h3>
-                <p style={{ ...styles.subText, margin: "4px 0 0 0" }}>Starting at <strong>Federal Institute of Science and Technology, Hormis Nagar, Mookannoor, Angamaly</strong> with 11 mapped stops.</p>
+                <p style={{ ...styles.subText, margin: "4px 0 0 0" }}>
+                  {trackingBus
+                    ? <><strong>{trackingBus.startingPlace}</strong> to <strong>{trackingBus.endingPlace}</strong>, matching the registered bus route.</>
+                    : "Loading the assigned route from the bus database..."}
+                </p>
               </div>
               <div style={styles.googleRouteBadge}>
-                <span>Distance: <strong>{osrmDistance}</strong></span>
-                <span>ETA: <strong style={{color: "#1a73e8"}}>{osrmDuration}</strong></span>
+                <span>Distance to {student.stop}: <strong>{studentStopDistance}</strong></span>
+                <span>ETA to {student.stop}: <strong style={{color: "#1a73e8"}}>{studentStopEta}</strong></span>
               </div>
             </div>
 
+            {trackingError && (
+              <div role="alert" style={{ color: "#b91c1c", background: "#fee2e2", padding: "10px 12px", borderRadius: "6px", marginBottom: "12px" }}>
+                {trackingError}
+              </div>
+            )}
             <div style={styles.nextStopLiveBanner}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                 <span style={styles.pulseIndicator}></span>
                 <div>
-                  <span style={{ fontSize: "0.75rem", color: "#64748b", textTransform: "uppercase", fontWeight: "700" }}>Automatically Updated Next Stop:</span>
+                  <span style={{ fontSize: "0.75rem", color: "#64748b", textTransform: "uppercase", fontWeight: "700" }}>Your Registered Stop:</span>
                   <div style={{ fontSize: "1.05rem", fontWeight: "bold", color: "#1a73e8" }}>
-                    Stop #{currentActiveStopIndex + 1}: {routeStops[currentActiveStopIndex]?.name}
+                    {studentStopReached
+                      ? `Arrived at ${student.stop}`
+                      : student.stop || trackingError || "Loading your registered stop..."}
                   </div>
                 </div>
               </div>
@@ -559,13 +863,27 @@ export default function StudentDashboard() {
                   </div>
                 </div>
 
+                {!seatAvailabilityReady && (
+                  <p role="status" style={{ textAlign: "center" }}>
+                    {seatAvailabilityError
+                      ? "Seat availability is unavailable. Booking is disabled; refresh or change the trip to retry."
+                      : "Loading seat availability..."}
+                  </p>
+                )}
+
+                {bookingWindowClosed && (
+                  <p role="status" style={{ textAlign: "center" }}>
+                    Booking for today's {tripTime.includes("Morning") ? "morning" : "evening"} trip closed at {bookingCutoffLabel} India time.
+                  </p>
+                )}
+
                 <div style={styles.busSeatMatrix}>
                   {busMatrix.map((row, rIndex) => (
                     <div key={rIndex} style={styles.busRow}>
                       <div style={styles.seatGroup}>
                         {row.slice(0, 3).map((seat, cIndex) => {
                           const sunlightTag = predictedSunlightMap[seat.id];
-                          let bg = "#ffffff", border = "2px solid #22c55e", cursor = "pointer";
+                          let bg = "#ffffff", border = "2px solid #22c55e", cursor = seatAvailabilityReady ? "pointer" : "not-allowed";
                           if (seat.status === "disabled") { bg = "#6b7280"; border = "2px solid #4b5563"; cursor = "not-allowed"; }
                           else if (seat.status === "sold") { bg = "#a5f3fc"; border = "2px solid #06b6d4"; cursor = "not-allowed"; }
                           else if (seat.status === "selected") { bg = "#1e3a8a"; border = "2px solid #0f172a"; }
@@ -582,7 +900,7 @@ export default function StudentDashboard() {
                         {row.slice(3, 6).map((seat, cIndex) => {
                           const actualCol = cIndex + 3;
                           const sunlightTag = predictedSunlightMap[seat.id];
-                          let bg = "#ffffff", border = "2px solid #22c55e", cursor = "pointer";
+                          let bg = "#ffffff", border = "2px solid #22c55e", cursor = seatAvailabilityReady ? "pointer" : "not-allowed";
                           if (seat.status === "disabled") { bg = "#6b7280"; border = "2px solid #4b5563"; cursor = "not-allowed"; }
                           else if (seat.status === "sold") { bg = "#a5f3fc"; border = "2px solid #06b6d4"; cursor = "not-allowed"; }
                           else if (seat.status === "selected") { bg = "#1e3a8a"; border = "2px solid #0f172a"; }
@@ -598,7 +916,7 @@ export default function StudentDashboard() {
                   ))}
                 </div>
                 <div style={{ textAlign: "center", marginTop: "20px" }}>
-                  <button onClick={handleBookSeat} style={styles.showSelectedBtn}>Confirm Reservation for {student.name}</button>
+                  <button onClick={handleBookSeat} disabled={!seatAvailabilityReady || !selectedSeat || bookingWindowClosed} style={styles.showSelectedBtn}>Confirm Reservation for {student.name}</button>
                   <div style={{ marginTop: "10px", fontFamily: "monospace", fontSize: "1rem" }}>{selectedSeat ? `[${selectedSeat.replace(",", "][")}]` : "[None Selected]"}</div>
                 </div>
               </div>
@@ -634,7 +952,13 @@ export default function StudentDashboard() {
                         <td style={styles.td}>{b.route}</td>
                         <td style={styles.td}><strong>[{b.seatNo.replace(",", "][")}]</strong></td>
                         <td style={styles.td}>{b.date} <br/><small style={{color: "#1a73e8"}}>{b.time}</small></td>
-                        <td style={styles.td}><button onClick={() => handleCancelBooking(b.bookingId, b.seatNo)} style={styles.cancelBtn}>Cancel</button></td>
+                        <td style={styles.td}>
+                          {isBookingCancellationClosed(b) ? (
+                            <span style={{ color: "#64748b", fontSize: "0.82rem" }}>Cancellation closed</span>
+                          ) : (
+                            <button onClick={() => handleCancelBooking(b.bookingId, b.seatNo, b.id, b)} style={styles.cancelBtn}>Cancel</button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

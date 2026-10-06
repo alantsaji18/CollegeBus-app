@@ -1,6 +1,11 @@
+from datetime import date
+from zoneinfo import ZoneInfo
+
 from rest_framework import viewsets, status
+from rest_framework.exceptions import ValidationError
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 from .models import AdminUser, Student, Bus, Staff, TravelReport, SeatBooking, BusLocation, LoginHistory, DailyLoginCount
@@ -105,7 +110,7 @@ class TravelReportViewSet(viewsets.ModelViewSet):
 
 
 class SeatBookingViewSet(viewsets.ModelViewSet):
-    queryset = SeatBooking.objects.all().order_by('-created_at')
+    queryset = SeatBooking.objects.filter(status='Confirmed').order_by('-created_at')
     serializer_class = SeatBookingSerializer
 
     def get_queryset(self):
@@ -113,6 +118,7 @@ class SeatBookingViewSet(viewsets.ModelViewSet):
         student_roll = self.request.query_params.get('studentRollNo')
         bus_no = self.request.query_params.get('busNumber')
         date = self.request.query_params.get('date')
+        trip_time = self.request.query_params.get('tripTime')
 
         if student_roll:
             queryset = queryset.filter(student_roll_no=student_roll)
@@ -120,7 +126,48 @@ class SeatBookingViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(bus_number=bus_no)
         if date:
             queryset = queryset.filter(booking_date=date)
+        if trip_time:
+            queryset = queryset.filter(trip_time=trip_time)
         return queryset
+
+    def perform_create(self, serializer):
+        try:
+            with transaction.atomic():
+                serializer.save()
+        except IntegrityError as exc:
+            raise ValidationError({
+                'seatNumber': 'This seat is already booked for this bus, date, and trip.'
+            }) from exc
+
+    def destroy(self, request, *args, **kwargs):
+        booking = self.get_object()
+        try:
+            booking_date = date.fromisoformat(booking.booking_date)
+        except (TypeError, ValueError) as exc:
+            raise ValidationError({
+                'bookingDate': 'This booking has an invalid date and cannot be cancelled.'
+            }) from exc
+
+        local_now = timezone.localtime(timezone.now(), ZoneInfo('Asia/Kolkata'))
+        if booking_date < local_now.date():
+            raise ValidationError({
+                'detail': 'Cancellation is closed for this trip.'
+            })
+
+        if booking_date == local_now.date():
+            cutoff_minutes = (
+                7 * 60 + 30
+                if 'Morning' in booking.trip_time
+                else 15 * 60 + 30
+            )
+            current_minutes = local_now.hour * 60 + local_now.minute
+            if current_minutes > cutoff_minutes:
+                cutoff_label = '7:30 AM' if 'Morning' in booking.trip_time else '3:30 PM'
+                raise ValidationError({
+                    'detail': f'Cancellation closed at {cutoff_label} India time.'
+                })
+
+        return super().destroy(request, *args, **kwargs)
 
 
 class BusLocationViewSet(viewsets.ModelViewSet):

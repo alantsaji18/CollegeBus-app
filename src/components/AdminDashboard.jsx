@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { dashboardApi, travelReportsApi } from "../services/api";
 import "./AdminDashboard.css";
@@ -29,10 +29,6 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
 
   const [reportSearch, setReportSearch] = useState("");
-
-  const [isLoggedIn, setIsLoggedIn] = useState(
-    sessionStorage.getItem("adminLoggedIn") === "true"
-  );
 
   const [stats, setStats] = useState({
     totalStudents: 800,
@@ -133,6 +129,8 @@ const AdminDashboard = () => {
         ""
     ).toLowerCase();
 
+    const date = String(report.date || "").toLowerCase();
+
     const status = String(
       report.status ||
         ""
@@ -144,23 +142,10 @@ const AdminDashboard = () => {
       driver.includes(q) ||
       arrival.includes(q) ||
       departure.includes(q) ||
+      date.includes(q) ||
       status.includes(q)
     );
   });
-
-  /*
-    ============================================================
-    ADMIN LOGIN PROTECTION
-    ============================================================
-
-    If the user tries to open /admin directly without logging in,
-    they will be redirected to /adminlogin.
-  */
-
-  if (!isLoggedIn) {
-    navigate("/adminlogin");
-    return null;
-  }
 
   /*
     ============================================================
@@ -173,11 +158,8 @@ const AdminDashboard = () => {
     sessionStorage.removeItem("adminLoggedIn");
     sessionStorage.removeItem("adminUsername");
 
-    // Update state
-    setIsLoggedIn(false);
-
     // Go back to admin login
-    navigate("/adminlogin");
+    navigate("/adminlogin", { replace: true });
   };
 
   return (
@@ -662,6 +644,10 @@ const AdminDashboard = () => {
               </th>
 
               <th>
+                Date
+              </th>
+
+              <th>
                 Arrival Time
               </th>
 
@@ -684,7 +670,7 @@ const AdminDashboard = () => {
               <tr>
 
                 <td
-                  colSpan="6"
+                  colSpan="7"
                   className="no-data"
                   style={{
                     textAlign: "center",
@@ -716,6 +702,8 @@ const AdminDashboard = () => {
                     report.departureTime ||
                     report.departure ||
                     "-";
+
+                  const date = report.date || "-";
 
                   const driver =
                     report.driver ||
@@ -749,6 +737,10 @@ const AdminDashboard = () => {
                       </td>
 
                       <td>
+                        {date}
+                      </td>
+
+                      <td>
                         {arrival}
                       </td>
 
@@ -770,7 +762,7 @@ const AdminDashboard = () => {
               <tr>
 
                 <td
-                  colSpan="6"
+                  colSpan="7"
                   className="no-data"
                   style={{
                     textAlign: "center",

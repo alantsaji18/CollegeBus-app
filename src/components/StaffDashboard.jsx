@@ -1,6 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { travelReportsApi } from "../services/api";
+import { busesApi, travelReportsApi } from "../services/api";
+import { toTrackingBus } from "../services/busRoutes";
+
+const getIndiaTodayString = () =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
 
 export default function StaffDashboard() {
   const navigate = useNavigate();
@@ -23,16 +27,18 @@ export default function StaffDashboard() {
 
   const [activeTab, setActiveTab] = useState("overview");
 
-  // Authorized Master Database Fleet Buses
-  const fleetBuses = [
-    { id: "Bus-101", routeName: "Campus → Angamaly", driver: "Ravi", coords: [10.2315, 76.4150], destCoords: [10.1410, 76.3550] },
-    { id: "Bus-102", routeName: "Campus → Ernakulam", driver: "Arun", coords: [10.2315, 76.4150], destCoords: [9.9816, 76.2999] },
-    { id: "Bus-103", routeName: "Campus → Chalakkudy", driver: "Meeran", coords: [10.2315, 76.4150], destCoords: [10.3116, 76.3312] },
-    { id: "Bus-104", routeName: "Campus → Kothamangalam", driver: "Arjun", coords: [10.2315, 76.4150], destCoords: [10.0658, 76.6273] },
-    { id: "Bus-105", routeName: "Campus → Muvattupuzha", driver: "Athul", coords: [10.2315, 76.4150], destCoords: [9.9839, 76.5796] },
-  ];
+  const [fleetBuses, setFleetBuses] = useState([]);
+  const [fleetLoadError, setFleetLoadError] = useState("");
 
   const [selectedTrackingBus, setSelectedTrackingBus] = useState("Bus-101");
+  const [editingReportId, setEditingReportId] = useState(null);
+  const [formBusNo, setFormBusNo] = useState("Bus-101");
+  const [formRoute, setFormRoute] = useState("Campus → Angamaly");
+  const [formDriver, setFormDriver] = useState("Ravi");
+  const [formArrival, setFormArrival] = useState("");
+  const [formDeparture, setFormDeparture] = useState("");
+  const [formDate, setFormDate] = useState(getIndiaTodayString);
+  const [formStatus, setFormStatus] = useState("On Time");
 
   const [travelHistory, setTravelHistory] = useState([]);
 
@@ -50,6 +56,8 @@ export default function StaffDashboard() {
           departureTime: r.departureTime || "",
           date: r.date || "",
           status: r.status || "On Time",
+          createdAt: r.created_at || "",
+          updatedAt: r.updated_at || "",
         }))
       );
     } catch (err) {
@@ -62,21 +70,52 @@ export default function StaffDashboard() {
     fetchHistory();
   }, []);
 
+  useEffect(() => {
+    let isCurrentRequest = true;
+    busesApi.getAll()
+      .then((data) => {
+        if (!Array.isArray(data)) {
+          throw new Error("Unexpected bus list response.");
+        }
+        const buses = data.map((bus) => {
+          const trackingBus = toTrackingBus(bus);
+          return {
+            ...trackingBus,
+            id: trackingBus.busId,
+            routeName: trackingBus.route,
+            driver: trackingBus.driverName,
+            coords: trackingBus.routePath[0],
+            destCoords: trackingBus.routePath[1],
+          };
+        });
+        if (isCurrentRequest) {
+          setFleetBuses(buses);
+          setFleetLoadError("");
+          if (buses.length) {
+            setSelectedTrackingBus((current) => buses.some((bus) => bus.id === current) ? current : buses[0].id);
+            setFormBusNo((current) => buses.some((bus) => bus.id === current) ? current : buses[0].id);
+            const initialBus = buses.find((bus) => bus.id === "Bus-101") || buses[0];
+            setFormRoute(initialBus.routeName);
+            setFormDriver(initialBus.driver);
+          }
+        }
+      })
+      .catch((error) => {
+        console.error("Could not load buses from api_bus:", error);
+        if (isCurrentRequest) {
+          setFleetLoadError("Could not load the registered buses. Please refresh and try again.");
+        }
+      });
+    return () => {
+      isCurrentRequest = false;
+    };
+  }, []);
+
   // Search & Filter States
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [dateFilter, setDateFilter] = useState("");
 
-  // Record Entry & Edit Form States
-  const [editingReportId, setEditingReportId] = useState(null); // Track if we are updating an existing record
-  const [formBusNo, setFormBusNo] = useState("Bus-101");
-  const [formRoute, setFormRoute] = useState("Campus → Angamaly");
-  const [formDriver, setFormDriver] = useState("Ravi");
-  const [formArrival, setFormArrival] = useState("");
-  const [formDeparture, setFormDeparture] = useState("");
-  const [formDate, setFormDate] = useState("2026-09-05");
-  const [formStatus, setFormStatus] = useState("On Time");
-  
   const [message, setMessage] = useState({ text: "", type: "success" });
 
   // OSRM Map States & Movement Animation Index
@@ -84,6 +123,8 @@ export default function StaffDashboard() {
   const [osrmDistance, setOsrmDistance] = useState("16.5 km");
   const [osrmDuration, setOsrmDuration] = useState("34 mins");
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [trackingError, setTrackingError] = useState("");
+  const [routeBusId, setRouteBusId] = useState("");
 
   const totalDistRef = useRef(16.5);
   const averageSpeedKmh = 30;
@@ -108,32 +149,46 @@ export default function StaffDashboard() {
   // Fetch OSRM route dynamically
   useEffect(() => {
     if (activeTab === "tracking") {
-      setCurrentStepIndex(0);
-      const activeBusObj = fleetBuses.find(b => b.id === selectedTrackingBus) || fleetBuses[0];
+      const activeBusObj = fleetBuses.find(b => b.id === selectedTrackingBus);
+      if (!activeBusObj || !activeBusObj.coords || !activeBusObj.destCoords) return undefined;
+      let isCurrentRoute = true;
       const fetchRoute = async () => {
         try {
           const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${activeBusObj.coords[1]},${activeBusObj.coords[0]};${activeBusObj.destCoords[1]},${activeBusObj.destCoords[0]}?overview=full&geometries=geojson`);
+          if (!res.ok) {
+            throw new Error(`Road route request failed with status ${res.status}.`);
+          }
           const data = await res.json();
-          if (data.routes && data.routes.length > 0) {
-            const r = data.routes[0];
-            const distKm = r.distance / 1000;
-            const durMins = Math.ceil(r.duration / 60);
-
+          const route = data.routes?.[0];
+          if (!route?.geometry?.coordinates?.length) {
+            throw new Error("No road route was returned for this bus.");
+          }
+          if (isCurrentRoute) {
+            const distKm = route.distance / 1000;
             totalDistRef.current = distKm;
             setOsrmDistance(distKm.toFixed(1) + " km");
-            setOsrmDuration(durMins + " mins");
-            setOsrmRouteCoords(r.geometry.coordinates.map(c => [c[1], c[0]]));
+            setOsrmDuration(Math.ceil(route.duration / 60) + " mins");
+            setOsrmRouteCoords(route.geometry.coordinates.map(([longitude, latitude]) => [latitude, longitude]));
+            setRouteBusId(activeBusObj.id);
+            setCurrentStepIndex(0);
+            setTrackingError("");
           }
         } catch (err) {
-          totalDistRef.current = 16.5;
-          setOsrmDistance("16.5 km");
-          setOsrmDuration("34 mins");
-          setOsrmRouteCoords([activeBusObj.coords, activeBusObj.destCoords]);
+          console.error(`Could not load road route for ${activeBusObj.id}:`, err);
+          if (isCurrentRoute) {
+            setOsrmRouteCoords([]);
+            setRouteBusId("");
+            setTrackingError("Road routing is unavailable; the configured road route could not be displayed.");
+          }
         }
       };
       fetchRoute();
+      return () => {
+        isCurrentRoute = false;
+      };
     }
-  }, [activeTab, selectedTrackingBus]);
+    return undefined;
+  }, [activeTab, selectedTrackingBus, fleetBuses]);
 
   // Leaflet map initialization
   useEffect(() => {
@@ -152,7 +207,7 @@ export default function StaffDashboard() {
   // Live Bus Movement Animation
   useEffect(() => {
     let interval = null;
-    if (activeTab === "tracking" && osrmRouteCoords.length > 0) {
+    if (activeTab === "tracking" && routeBusId === selectedTrackingBus && osrmRouteCoords.length > 0) {
       interval = setInterval(() => {
         setCurrentStepIndex((prevIndex) => {
           const totalSteps = osrmRouteCoords.length - 1;
@@ -169,14 +224,17 @@ export default function StaffDashboard() {
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [activeTab, osrmRouteCoords]);
+  }, [activeTab, osrmRouteCoords, routeBusId, selectedTrackingBus]);
 
   // Update Map Polyline & Marker
   useEffect(() => {
-    if (leafletMapInstance.current && osrmRouteCoords.length > 0 && window.L) {
+    if (leafletMapInstance.current && window.L) {
       const map = leafletMapInstance.current;
       if (polylineRef.current) map.removeLayer(polylineRef.current);
       if (busMarkerRef.current) map.removeLayer(busMarkerRef.current);
+      polylineRef.current = null;
+      busMarkerRef.current = null;
+      if (!osrmRouteCoords.length || routeBusId !== selectedTrackingBus) return;
 
       polylineRef.current = window.L.polyline(osrmRouteCoords, { color: '#1a73e8', weight: 6, opacity: 0.85 }).addTo(map);
 
@@ -194,11 +252,16 @@ export default function StaffDashboard() {
         map.fitBounds(polylineRef.current.getBounds(), { padding: [50, 50] });
       }
     }
-  }, [osrmRouteCoords, currentStepIndex, selectedTrackingBus]);
+  }, [osrmRouteCoords, currentStepIndex, selectedTrackingBus, routeBusId]);
 
   // Save or Update Gate Record
   const handleSaveRecord = async (e) => {
     e.preventDefault();
+
+    if (formDate > getIndiaTodayString()) {
+      setMessage({ text: "Travel records cannot be entered for a future date.", type: "error" });
+      return;
+    }
 
     const matchingFleetBus = fleetBuses.find(b => b.id === formBusNo);
     if (!matchingFleetBus) {
@@ -273,7 +336,12 @@ export default function StaffDashboard() {
     setActiveTab("entry");
   };
 
-  const handleLogout = () => navigate("/stafflogin");
+  const handleLogout = () => {
+    sessionStorage.removeItem("staffLoggedIn");
+    sessionStorage.removeItem("staffUsername");
+    sessionStorage.removeItem("loggedInStaff");
+    navigate("/stafflogin", { replace: true });
+  };
 
   const filteredHistory = travelHistory.filter(item => {
     const bus = String(item.busNumber || item.busNo || "").toLowerCase();
@@ -293,6 +361,14 @@ export default function StaffDashboard() {
 
     return matchesSearch && matchesStatus && matchesDate;
   });
+
+  const selectedFleetBus = fleetBuses.find((bus) => bus.id === selectedTrackingBus);
+  const trackingMessage = trackingError ||
+    (!fleetBuses.length ? fleetLoadError || "No registered buses are available to track." : "") ||
+    (selectedFleetBus && (!selectedFleetBus.coords || !selectedFleetBus.destCoords)
+      ? `A map location is not configured for ${selectedFleetBus.routeName}.`
+      : "");
+  const hasCurrentTrackingRoute = routeBusId === selectedTrackingBus && osrmRouteCoords.length > 0;
 
   return (
     <div style={styles.page}>
@@ -370,7 +446,11 @@ export default function StaffDashboard() {
               <div style={{ display: "flex", gap: "15px", alignItems: "center", flexWrap: "wrap" }}>
                 <select 
                   value={selectedTrackingBus} 
-                  onChange={(e) => setSelectedTrackingBus(e.target.value)} 
+                  onChange={(e) => {
+                    setSelectedTrackingBus(e.target.value);
+                    setCurrentStepIndex(0);
+                    setTrackingError("");
+                  }}
                   style={styles.busSelectorDropdown}
                 >
                   {fleetBuses.map(b => (
@@ -378,10 +458,11 @@ export default function StaffDashboard() {
                   ))}
                 </select>
                 <div style={styles.badgeBox}>
-                  <span>Remaining Distance: <strong>{osrmDistance}</strong></span> | <span>ETA: <strong style={{ color: "#1a73e8" }}>{osrmDuration}</strong></span>
+                  <span>Remaining Distance: <strong>{hasCurrentTrackingRoute ? osrmDistance : "Calculating..."}</strong></span> | <span>ETA: <strong style={{ color: "#1a73e8" }}>{hasCurrentTrackingRoute ? osrmDuration : "Calculating..."}</strong></span>
                 </div>
               </div>
             </div>
+            {trackingMessage && <div role="alert" style={{ color: "#b91c1c", background: "#fee2e2", padding: "10px 12px", borderRadius: "6px", marginBottom: "12px" }}>{trackingMessage}</div>}
             <div ref={mapRef} style={{ width: "100%", height: "480px", borderRadius: "10px", zIndex: 1 }}></div>
           </div>
         )}
@@ -441,39 +522,51 @@ export default function StaffDashboard() {
                   {filteredHistory.length === 0 ? (
                     <tr><td colSpan="9" style={{ textAlign: "center", padding: "20px", color: "#64748b" }}>No matching travel records found.</td></tr>
                   ) : (
-                    filteredHistory.map((item) => (
-                      <tr key={item.reportId}>
-                        <td style={styles.td}><strong>{item.reportId}</strong></td>
-                        <td style={styles.td}><span style={styles.busPill}>{item.busNumber}</span></td>
-                        <td style={styles.td}>{item.route}</td>
-                        <td style={styles.td}>{item.driver}</td>
-                        <td style={styles.td}>
-                          <span style={{ color: item.arrivalTime === "Pending" ? "#94a3b8" : "#334155", fontStyle: item.arrivalTime === "Pending" ? "italic" : "normal" }}>
-                            {item.arrivalTime}
-                          </span>
-                        </td>
-                        <td style={styles.td}>
-                          <span style={{ color: item.departureTime === "Pending" ? "#94a3b8" : "#334155", fontStyle: item.departureTime === "Pending" ? "italic" : "normal" }}>
-                            {item.departureTime}
-                          </span>
-                        </td>
-                        <td style={styles.td}><strong>{item.date}</strong></td>
-                        <td style={styles.td}>
-                          <span style={{ 
-                            ...styles.statusBadge, 
-                            backgroundColor: item.status === "On Time" ? "#dcfce7" : "#fee2e2",
-                            color: item.status === "On Time" ? "#166534" : "#b91c1c"
-                          }}>
-                            {item.status}
-                          </span>
-                        </td>
-                        <td style={styles.td}>
-                          <button onClick={() => handleStartEdit(item)} style={styles.updateRowBtn}>
-                            ✏️ Update
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                    filteredHistory.map((item) => {
+                      const wasPastReportUpdated =
+                        item.date < getIndiaTodayString() &&
+                        item.updatedAt &&
+                        item.createdAt &&
+                        new Date(item.updatedAt) > new Date(item.createdAt);
+                      return (
+                        <tr key={item.reportId} style={wasPastReportUpdated ? { backgroundColor: "#fffbeb" } : undefined}>
+                          <td style={styles.td}><strong>{item.reportId}</strong></td>
+                          <td style={styles.td}><span style={styles.busPill}>{item.busNumber}</span></td>
+                          <td style={styles.td}>{item.route}</td>
+                          <td style={styles.td}>{item.driver}</td>
+                          <td style={styles.td}>
+                            <span style={{ color: item.arrivalTime === "Pending" ? "#94a3b8" : "#334155", fontStyle: item.arrivalTime === "Pending" ? "italic" : "normal" }}>
+                              {item.arrivalTime}
+                            </span>
+                          </td>
+                          <td style={styles.td}>
+                            <span style={{ color: item.departureTime === "Pending" ? "#94a3b8" : "#334155", fontStyle: item.departureTime === "Pending" ? "italic" : "normal" }}>
+                              {item.departureTime}
+                            </span>
+                          </td>
+                          <td style={styles.td}>
+                            <strong>{item.date}</strong>
+                            {wasPastReportUpdated && (
+                              <span style={{ ...styles.updatedBadge, marginLeft: "8px" }}>Updated</span>
+                            )}
+                          </td>
+                          <td style={styles.td}>
+                            <span style={{
+                              ...styles.statusBadge,
+                              backgroundColor: item.status === "On Time" ? "#dcfce7" : "#fee2e2",
+                              color: item.status === "On Time" ? "#166534" : "#b91c1c"
+                            }}>
+                              {item.status}
+                            </span>
+                          </td>
+                          <td style={styles.td}>
+                            <button onClick={() => handleStartEdit(item)} style={styles.updateRowBtn}>
+                              ✏️ Update
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -527,7 +620,7 @@ export default function StaffDashboard() {
               </div>
               <div style={styles.inputField}>
                 <label style={styles.label}>Date</label>
-                <input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} style={styles.input} required />
+                <input type="date" value={formDate} max={getIndiaTodayString()} onChange={(e) => setFormDate(e.target.value)} style={styles.input} required />
               </div>
               <div style={styles.inputField}>
                 <label style={styles.label}>Trip Status</label>
@@ -604,6 +697,7 @@ const styles = {
   td: { padding: "14px 10px", borderBottom: "1px solid #f1f5f9", fontSize: "0.9rem", color: "#334155" },
   busPill: { backgroundColor: "#e0f2fe", color: "#0369a1", padding: "4px 10px", borderRadius: "6px", fontWeight: "600", fontSize: "0.85rem" },
   statusBadge: { padding: "4px 10px", borderRadius: "20px", fontSize: "0.8rem", fontWeight: "700" },
+  updatedBadge: { display: "inline-block", backgroundColor: "#fef3c7", color: "#92400e", padding: "3px 8px", borderRadius: "12px", fontSize: "0.72rem", fontWeight: 700 },
   updateRowBtn: { backgroundColor: "#e0f2fe", color: "#0369a1", border: "none", padding: "6px 12px", borderRadius: "6px", fontWeight: "600", cursor: "pointer", fontSize: "0.85rem" },
   cancelEditBtn: { backgroundColor: "#fee2e2", color: "#b91c1c", border: "none", padding: "6px 12px", borderRadius: "6px", fontWeight: "600", cursor: "pointer", fontSize: "0.85rem" },
 
